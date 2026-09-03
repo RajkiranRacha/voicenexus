@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   PhoneCall, Headphones, BarChart3, Sliders, Radio
 } from 'lucide-react';
@@ -113,10 +113,18 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === 'SIMULATOR' && <PhoneSimulator />}
-        {activeTab === 'AGENT' && <AgentDesktop />}
-        {activeTab === 'OPS' && <OpsDashboard />}
-        {activeTab === 'ADMIN' && <AdminConfig />}
+        <div style={{ display: activeTab === 'SIMULATOR' ? 'block' : 'none' }}>
+          <PhoneSimulator />
+        </div>
+        <div style={{ display: activeTab === 'AGENT' ? 'block' : 'none' }}>
+          <AgentDesktop />
+        </div>
+        <div style={{ display: activeTab === 'OPS' ? 'block' : 'none' }}>
+          <OpsDashboard />
+        </div>
+        <div style={{ display: activeTab === 'ADMIN' ? 'block' : 'none' }}>
+          <AdminConfig />
+        </div>
       </main>
 
       {/* Footer */}

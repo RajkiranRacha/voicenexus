@@ -1,4 +1,4 @@
-﻿export interface LatencyMetrics {
+export interface LatencyMetrics {
   stt_ms: number;
   nlu_ms: number;
   tts_ms: number;
@@ -24,6 +24,8 @@ export interface CallerProfile {
   monthly_rate: number;
   current_balance: number;
   due_date: string;
+  payment_card_last4?: string;
+  email?: string;
   auth_status: string;
   has_active_outage: boolean;
   router_status: string;
@@ -55,6 +57,48 @@ export interface EscalationPayload {
   recommended_agent_queue: string;
   transcript_snippet: Array<{ speaker: string; text: string }>;
   created_at: string;
+}
+
+export interface LiveStreamTurn {
+  session_id: string;
+  turn: DialogueTurn;
+  metadata?: {
+    ani?: string;
+    customer_name?: string;
+    account_number?: string;
+    state?: string;
+    language?: string;
+  };
+}
+
+export interface AdminConfigData {
+  operator_name: string;
+  greeting_prompt: string;
+  spanish_greeting_prompt: string;
+  hindi_greeting_prompt?: string;
+  hold_prompt: string;
+  close_prompt: string;
+  escalation_prompt: string;
+  regulatory_disclosure_enabled: boolean;
+  regulatory_disclosure_prompt: string;
+  default_voice: string;
+  spanish_voice: string;
+  hindi_voice?: string;
+  voice_rate: string;
+  voice_pitch: string;
+  language: string;
+  pronunciation_overrides: Record<string, string>;
+}
+
+export interface ActiveCallState {
+  sessionId: string;
+  agentId: string;
+  callerName: string;
+  ani: string;
+  isMicActive: boolean;
+  isMuted: boolean;
+  isAudioConnected: boolean;
+  status: 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED';
 }
 
 export interface TelemetrySummary {

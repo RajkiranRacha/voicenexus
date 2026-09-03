@@ -10,6 +10,7 @@ from app.services.tts import tts_service
 from app.services.agent_hub import agent_hub
 from app.services.telemetry import telemetry_service
 from app.services.bss_oss import bss_service
+from app.config import config, get_voice_for_language
 
 class DialogueOrchestrator:
     """
@@ -34,7 +35,10 @@ class DialogueOrchestrator:
         
         # Measure TTS synthesis time
         tts_start = time.perf_counter()
-        audio_base64 = await tts_service.synthesize_to_base64(greeting_text)
+        voice_override = get_voice_for_language(self.fsm.language, config.DEFAULT_VOICE)
+        audio_base64 = await tts_service.synthesize_to_base64(
+            greeting_text, voice_override=voice_override, rate_override=config.VOICE_RATE
+        )
         tts_ms = round((time.perf_counter() - tts_start) * 1000, 1)
 
         ai_turn = DialogueTurn(
@@ -46,13 +50,24 @@ class DialogueOrchestrator:
         )
         self.fsm.turns.append(ai_turn)
 
+        # Broadcast initial greeting turn to Live Agent Overlay (VN-10)
+        metadata = {
+            "ani": self.ani,
+            "customer_name": self.fsm.account.customer_name if self.fsm.account else "Unregistered Caller",
+            "account_number": self.fsm.account.account_number if self.fsm.account else "UNREGISTERED",
+            "state": self.fsm.state.value,
+            "language": self.fsm.language
+        }
+        await agent_hub.broadcast_transcript_turn(self.session_id, ai_turn.model_dump(), metadata)
+
         return {
             "type": "SESSION_STARTED",
             "session_id": self.session_id,
             "caller_account": self.fsm.account.model_dump() if self.fsm.account else None,
             "turn": ai_turn.model_dump(),
             "audio_base64": audio_base64,
-            "state": self.fsm.state.value
+            "state": self.fsm.state.value,
+            "language": self.fsm.language
         }
 
     async def process_caller_utterance(
@@ -76,8 +91,16 @@ class DialogueOrchestrator:
         )
         self.fsm.turns.append(caller_turn)
 
+        metadata = {
+            "ani": self.ani,
+            "customer_name": self.fsm.account.customer_name if self.fsm.account else "Unregistered Caller",
+            "account_number": self.fsm.account.account_number if self.fsm.account else "UNREGISTERED",
+            "state": self.fsm.state.value,
+            "language": self.fsm.language
+        }
+
         # Broadcast turn to Live Agent Overlay (VN-10)
-        await agent_hub.broadcast_transcript_turn(self.session_id, caller_turn.model_dump())
+        await agent_hub.broadcast_transcript_turn(self.session_id, caller_turn.model_dump(), metadata)
 
         # 2. Process through Deterministic State Machine (NLU)
         nlu_start = time.perf_counter()
@@ -86,7 +109,10 @@ class DialogueOrchestrator:
 
         # 3. Generate Speech Audio via Neural TTS
         tts_start = time.perf_counter()
-        audio_base64 = await tts_service.synthesize_to_base64(response_text)
+        voice_override = get_voice_for_language(self.fsm.language, config.DEFAULT_VOICE)
+        audio_base64 = await tts_service.synthesize_to_base64(
+            response_text, voice_override=voice_override, rate_override=config.VOICE_RATE
+        )
         tts_ms = round((time.perf_counter() - tts_start) * 1000, 1)
 
         total_ms = round((time.perf_counter() - turn_start) * 1000 + simulated_stt_ms, 1)
@@ -107,8 +133,14 @@ class DialogueOrchestrator:
         )
         self.fsm.turns.append(ai_turn)
 
+        metadata["state"] = new_state.value
+        metadata["language"] = self.fsm.language
+        if self.fsm.account:
+            metadata["customer_name"] = self.fsm.account.customer_name
+            metadata["account_number"] = self.fsm.account.account_number
+
         # Broadcast turn to Live Agent Overlay
-        await agent_hub.broadcast_transcript_turn(self.session_id, ai_turn.model_dump())
+        await agent_hub.broadcast_transcript_turn(self.session_id, ai_turn.model_dump(), metadata)
 
         # 4. If escalation triggered, broadcast structured handoff payload
         if escalation_payload:
