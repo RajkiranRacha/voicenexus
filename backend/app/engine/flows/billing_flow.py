@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 import re
 from typing import Dict, Any, Tuple
 from app.models.schemas import SubscriberAccount, AuthStatus
@@ -34,8 +34,38 @@ class BillingFlow:
             )
             return response, False, True, flow_context
 
-        # Step 1: Initial balance inquiry or payment arrangement intent
+        # Step 1: Initial balance inquiry, direct payment, or payment arrangement intent
         if step == "INITIAL":
+            # Check if caller wants to pay directly now
+            if any(term in lowered for term in ["pay now", "pay bill now", "make a payment", "charge my card", "pay my bill", "pay balance", "pay it"]):
+                if account.current_balance <= 0:
+                    flow_context["step"] = "COMPLETED"
+                    response = (
+                        f"Your account balance is currently $0.00. No payment is required at this time. "
+                        "Can I help you with anything else today?"
+                    )
+                    return response, True, False, flow_context
+                
+                flow_context["step"] = "CONFIRM_DIRECT_PAYMENT"
+                flow_context["attempted_action"] = "DIRECT_CARD_PAYMENT"
+                flow_context["payment_amount"] = account.current_balance
+                response = (
+                    f"Your balance is ${account.current_balance:.2f}, due on {account.due_date}. "
+                    f"We have your card ending in {account.payment_card_last4} on file. "
+                    f"To confirm before charging: would you like me to process a one-time payment of "
+                    f"${account.current_balance:.2f} to this card right now?"
+                )
+                return response, False, False, flow_context
+
+            # Check if caller wants statement emailed
+            if any(term in lowered for term in ["email statement", "send bill", "copy of bill", "email bill", "send statement"]):
+                flow_context["step"] = "COMPLETED"
+                response = (
+                    f"I have sent an itemized copy of your latest billing statement to {account.email}. "
+                    "You should receive it within a few minutes. Is there anything else I can assist you with?"
+                )
+                return response, True, False, flow_context
+
             # Check if caller wants to schedule a payment arrangement
             if any(term in lowered for term in ["pay later", "payment arrangement", "promise", "next week", "friday", "extension", "delay"]):
                 flow_context["step"] = "AWAITING_PAYMENT_DATE"
@@ -51,7 +81,37 @@ class BillingFlow:
                 flow_context["attempted_action"] = "BALANCE_INQUIRY"
                 response = (
                     f"Your current account balance is ${account.current_balance:.2f}, and your due date is {account.due_date}. "
-                    "Would you like to schedule a payment arrangement, or is there anything else with your bill I can help with?"
+                    "Would you like to pay now using your card on file, set up a payment arrangement, or is there anything else with your bill I can help with?"
+                )
+                return response, False, False, flow_context
+
+        # Step: Direct Payment Confirmation
+        elif step == "CONFIRM_DIRECT_PAYMENT":
+            if any(term in lowered for term in ["yes", "pay", "charge", "confirm", "sure", "yep", "yeah", "that's right", "go ahead"]):
+                idempotency_key = flow_context.get("idempotency_key", str(uuid.uuid4()))
+                amt = flow_context.get("payment_amount", account.current_balance)
+                result = bss_service.process_card_payment(
+                    account_number=account.account_number,
+                    amount=amt,
+                    card_last4=account.payment_card_last4,
+                    idempotency_key=idempotency_key
+                )
+                flow_context["transaction_id"] = result["transaction_id"]
+                flow_context["step"] = "COMPLETED"
+                response = (
+                    f"Success! Your payment of ${amt:.2f} has been approved on card ending in {account.payment_card_last4}. "
+                    f"Your receipt reference number is {result['transaction_id']}, and your updated balance is $0.00. "
+                    "Can I help you with anything else today?"
+                )
+                return response, True, False, flow_context
+            elif any(term in lowered for term in ["no", "cancel", "don't", "stop", "change"]):
+                flow_context["step"] = "BALANCE_RECITED"
+                response = "No payment was processed. Would you like to schedule a payment arrangement for later instead?"
+                return response, False, False, flow_context
+            else:
+                response = (
+                    f"Please confirm: would you like me to charge ${account.current_balance:.2f} to your card ending in {account.payment_card_last4}? "
+                    "Please say yes or no."
                 )
                 return response, False, False, flow_context
 

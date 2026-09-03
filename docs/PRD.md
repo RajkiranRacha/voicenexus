@@ -310,11 +310,4 @@ Customer strapline
 
 Turn IVR into resolution, not frustration. 
 
- 
-</USER_REQUEST>
-<ADDITIONAL_METADATA>
-The current local time is: 2026-09-02T22:25:12+05:30.
-</ADDITIONAL_METADATA>
-<USER_SETTINGS_CHANGE>
-The user changed setting `Model Selection` from None to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
-</USER_SETTINGS_CHANGE>
+ 

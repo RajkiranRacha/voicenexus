@@ -1,7 +1,8 @@
-﻿import json
+import json
 import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.engine.orchestrator import DialogueOrchestrator
+from app.services.agent_hub import agent_hub
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ async def call_websocket_endpoint(websocket: WebSocket):
             if msg_type == "START_CALL":
                 ani = data.get("ani", "+15550192834")
                 orchestrator = DialogueOrchestrator(session_id, ani)
+                agent_hub.register_caller(session_id, websocket)
                 welcome_resp = await orchestrator.start_session()
                 await websocket.send_text(json.dumps(welcome_resp))
 
@@ -27,11 +29,17 @@ async def call_websocket_endpoint(websocket: WebSocket):
                 if not orchestrator:
                     ani = data.get("ani", "+15550192834")
                     orchestrator = DialogueOrchestrator(session_id, ani)
+                    agent_hub.register_caller(session_id, websocket)
                 
                 user_text = data.get("text", "")
                 stt_ms = data.get("stt_latency_ms", 140.0)
                 resp = await orchestrator.process_caller_utterance(user_text, stt_ms)
                 await websocket.send_text(json.dumps(resp))
+
+            elif msg_type in ["RTC_OFFER", "RTC_ANSWER", "RTC_ICE_CANDIDATE", "CALLER_VOICE_STREAM", "CALLER_LIVE_SPEECH"]:
+                # Relay WebRTC signaling and audio data directly to live agent
+                data["session_id"] = session_id
+                await agent_hub.relay_caller_to_agent(session_id, data)
 
             elif msg_type == "DTMF_KEY":
                 if orchestrator:
@@ -47,9 +55,15 @@ async def call_websocket_endpoint(websocket: WebSocket):
             elif msg_type == "END_CALL":
                 if orchestrator and orchestrator.fsm.state.value not in ["RESOLVED_CONTAINED", "ESCALATING_TO_AGENT"]:
                     orchestrator._finalize_telemetry(is_escalated=False)
+                await agent_hub.relay_caller_to_agent(session_id, {"type": "CALL_ENDED", "session_id": session_id})
+                agent_hub.unregister_caller(session_id)
                 await websocket.send_text(json.dumps({"type": "CALL_ENDED", "session_id": session_id}))
                 break
 
     except WebSocketDisconnect:
         if orchestrator and orchestrator.fsm.state.value not in ["RESOLVED_CONTAINED", "ESCALATING_TO_AGENT"]:
             orchestrator._finalize_telemetry(is_escalated=False)
+        await agent_hub.relay_caller_to_agent(session_id, {"type": "CALL_ENDED", "session_id": session_id})
+        agent_hub.unregister_caller(session_id)
+    finally:
+        agent_hub.unregister_caller(session_id)

@@ -82,8 +82,19 @@ class BssOssService:
         return None
 
     def get_account_by_number(self, account_number: str) -> Optional[SubscriberAccount]:
+        cleaned = account_number.upper().strip()
+        digits = "".join(filter(str.isdigit, cleaned))
         for acc in self._accounts.values():
-            if acc.account_number.upper() == account_number.upper():
+            if acc.account_number.upper() == cleaned:
+                return acc
+            if digits and len(digits) >= 4 and digits in "".join(filter(str.isdigit, acc.account_number)):
+                return acc
+        return None
+
+    def get_account_by_zip(self, zip_code: str) -> Optional[SubscriberAccount]:
+        cleaned = zip_code.strip()
+        for acc in self._accounts.values():
+            if acc.zip_code == cleaned:
                 return acc
         return None
 
@@ -117,6 +128,38 @@ class BssOssService:
             "details": record
         }
         return self._idempotency_log[idempotency_key]
+
+    def process_card_payment(
+        self,
+        account_number: str,
+        amount: float,
+        card_last4: str = "4242",
+        idempotency_key: str = None
+    ) -> Dict[str, Any]:
+        """
+        Processes real-time bill payment against the card on file (VN-4).
+        Deducts balance, creates transaction receipt with idempotency guard.
+        """
+        if idempotency_key and idempotency_key in self._idempotency_log:
+            return self._idempotency_log[idempotency_key]
+
+        acc = self.get_account_by_number(account_number)
+        tx_id = f"TXN-{uuid.uuid4().hex[:8].upper()}"
+        if acc:
+            acc.current_balance = max(0.0, round(acc.current_balance - amount, 2))
+
+        record = {
+            "success": True,
+            "transaction_id": tx_id,
+            "account_number": account_number,
+            "amount_paid": amount,
+            "remaining_balance": acc.current_balance if acc else 0.0,
+            "payment_method": f"Card ending in {card_last4}",
+            "timestamp": datetime.now().isoformat()
+        }
+        if idempotency_key:
+            self._idempotency_log[idempotency_key] = record
+        return record
 
     def check_outage_by_zip(self, zip_code: str) -> Optional[Dict[str, Any]]:
         return self._outages.get(zip_code)

@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from app.models.schemas import CallState, IntentEnum, AuthStatus
 from app.engine.state_machine import CallSessionStateMachine
 from app.services.identity import identity_service
@@ -84,3 +84,58 @@ def test_telemetry_calculation():
     assert summary.containment_rate_pct > 0
     assert summary.transfer_rate_pct > 0
     assert summary.avg_handle_time_automated_sec > 0
+
+def test_unregistered_caller_kba_auth():
+    # Calling from an unregistered ANI
+    session = CallSessionStateMachine(session_id="test-session-unreg", ani="+15559990000")
+    greeting = session.get_greeting()
+    assert session.state == CallState.AUTH_CHALLENGE
+    assert "don't recognize the phone number" in greeting or "account number or 5-digit billing ZIP" in greeting
+
+    # Provide zip code 94107 (associated with Jordan Rivera)
+    resp, state, esc = session.process_turn("My zip code is 94107")
+    assert state == CallState.INTENT_ROUTING
+    assert session.account is not None
+    assert "Jordan Rivera" in resp
+    assert session.account.auth_status == AuthStatus.KBA_VERIFIED
+
+def test_direct_card_payment_flow():
+    # Pre-registered subscriber Jordan Rivera
+    session = CallSessionStateMachine(session_id="test-session-pay", ani="+15550192834")
+    session.get_greeting()
+
+    # Inquire and request direct payment
+    resp1, state1, esc1 = session.process_turn("I want to pay my bill now with my card on file")
+    assert state1 == CallState.SUBFLOW_EXECUTION
+    assert "card ending in 4242" in resp1
+    assert "To confirm before charging" in resp1
+
+    # Confirm payment
+    resp2, state2, esc2 = session.process_turn("Yes, charge my card")
+    assert state2 == CallState.RESOLVED_CONTAINED
+    assert "Success! Your payment" in resp2
+    assert "TXN-" in resp2
+    assert "$0.00" in resp2
+    assert session.account.current_balance == 0.0
+
+def test_regulatory_disclosure_and_bilingual_switch():
+    from app.config import config
+    config.REGULATORY_DISCLOSURE_ENABLED = True
+    session = CallSessionStateMachine(session_id="test-session-bilingual", ani="+15550192834")
+    greeting = session.get_greeting()
+    assert config.REGULATORY_DISCLOSURE_PROMPT in greeting
+
+    # Switch to Spanish
+    resp, state, esc = session.process_turn("Quiero hablar en español")
+    assert "He cambiado el idioma a español" in resp
+    assert session.language == "es-US"
+
+def test_pronunciation_overrides():
+    from app.services.tts import tts_service
+    raw_text = "Your ONT terminal is transmitting 1 Gbps with VoIP enabled via SMS"
+    processed = tts_service.apply_pronunciation_overrides(raw_text)
+    assert "O-N-T" in processed
+    assert "gigabits per second" in processed
+    assert "Voice over I-P" in processed
+    assert "text message" in processed
+

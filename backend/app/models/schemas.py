@@ -6,18 +6,25 @@ from datetime import datetime
 class AuthStatus(str, Enum):
     UNAUTHENTICATED = "UNAUTHENTICATED"
     ANI_MATCHED = "ANI_MATCHED"
+    KBA_VERIFIED = "KBA_VERIFIED"
     OTP_VERIFIED = "OTP_VERIFIED"
 
 class IntentEnum(str, Enum):
     BILLING_INQUIRY = "BILLING_INQUIRY"
+    PAY_BILL_NOW = "PAY_BILL_NOW"
     PAYMENT_PROMISE = "PAYMENT_PROMISE"
     OUTAGE_TRIAGE = "OUTAGE_TRIAGE"
     PLAN_INQUIRY = "PLAN_INQUIRY"
     PLAN_UPGRADE = "PLAN_UPGRADE"
     CALLBACK_SCHEDULE = "CALLBACK_SCHEDULE"
     AGENT_ESCALATION = "AGENT_ESCALATION"
+    CONFIRMATION = "CONFIRMATION"
     CONFIRMATION_YES = "CONFIRMATION_YES"
+    REJECTION = "REJECTION"
     CONFIRMATION_NO = "CONFIRMATION_NO"
+    GRATITUDE = "GRATITUDE"
+    ACKNOWLEDGEMENT = "ACKNOWLEDGEMENT"
+    LANGUAGE_SELECT = "LANGUAGE_SELECT"
     UNKNOWN = "UNKNOWN"
 
 class CallState(str, Enum):
@@ -55,6 +62,8 @@ class SubscriberAccount(BaseModel):
     monthly_rate: float
     current_balance: float
     due_date: str
+    payment_card_last4: str = "4242"
+    email: str = "customer@example.com"
     auth_status: AuthStatus = AuthStatus.UNAUTHENTICATED
     has_active_outage: bool = False
     router_status: str = "ONLINE"  # "ONLINE", "OFFLINE", "DEGRADED"

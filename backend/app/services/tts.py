@@ -1,7 +1,8 @@
-﻿import io
+import io
+import re
 import asyncio
 import base64
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import edge_tts
 from app.config import config
 
@@ -9,6 +10,7 @@ class NeuralTtsService:
     """
     Streaming Neural Text-To-Speech Service (VN-7).
     Generates human-like voice synthesis with sub-250ms chunk latency.
+    Applies telco pronunciation overrides automatically.
     """
 
     def __init__(self):
@@ -21,15 +23,33 @@ class NeuralTtsService:
         self.rate = rate
         self.pitch = pitch
 
-    async def synthesize_to_bytes(self, text: str) -> bytes:
+    def apply_pronunciation_overrides(self, text: str) -> str:
         """
-        Synthesize text to complete audio bytes (mp3).
+        Replaces telco acronyms and technical terms with phonetic pronunciation strings.
         """
+        processed = text
+        for pattern, replacement in config.PRONUNCIATION_OVERRIDES.items():
+            processed = re.sub(pattern, replacement, processed, flags=re.IGNORECASE)
+        return processed
+
+    async def synthesize_to_bytes(
+        self,
+        text: str,
+        voice_override: Optional[str] = None,
+        rate_override: Optional[str] = None
+    ) -> bytes:
+        """
+        Synthesize text to complete audio bytes (mp3) with pronunciation overrides.
+        """
+        clean_text = self.apply_pronunciation_overrides(text)
+        selected_voice = voice_override or self.voice or config.DEFAULT_VOICE
+        selected_rate = rate_override or self.rate or config.VOICE_RATE
+        selected_pitch = self.pitch or config.VOICE_PITCH
         communicate = edge_tts.Communicate(
-            text=text,
-            voice=self.voice,
-            rate=self.rate,
-            pitch=self.pitch
+            text=clean_text,
+            voice=selected_voice,
+            rate=selected_rate,
+            pitch=selected_pitch
         )
         audio_stream = io.BytesIO()
         async for chunk in communicate.stream():
@@ -37,11 +57,18 @@ class NeuralTtsService:
                 audio_stream.write(chunk["data"])
         return audio_stream.getvalue()
 
-    async def synthesize_to_base64(self, text: str) -> str:
+    async def synthesize_to_base64(
+        self,
+        text: str,
+        voice_override: Optional[str] = None,
+        rate_override: Optional[str] = None
+    ) -> str:
         """
         Returns base64 encoded audio for immediate browser playback.
         """
-        audio_bytes = await self.synthesize_to_bytes(text)
+        audio_bytes = await self.synthesize_to_bytes(
+            text, voice_override=voice_override, rate_override=rate_override
+        )
         return base64.b64encode(audio_bytes).decode("utf-8")
 
 tts_service = NeuralTtsService()
