@@ -69,6 +69,12 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
     webrtc.close();
     setIsAudioConnected(false);
     setActiveCallSessionId(null);
+
+    if (sessionId) {
+      setAcceptedCalls(prev => prev.filter(id => id !== sessionId));
+      setEscalations(prev => prev.filter(e => e.session_id !== sessionId));
+      setSelectedEscalation(prev => (prev && prev.session_id === sessionId ? null : prev));
+    }
   }, [webrtc]);
 
   useEffect(() => {
