@@ -1,9 +1,11 @@
 import json
 import uuid
+import base64
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.engine.orchestrator import DialogueOrchestrator
 from app.services.agent_hub import agent_hub
-from app.config import config
+from app.services.stt import stt_service
+from app.config import config, get_whisper_language_code
 
 router = APIRouter()
 
@@ -36,6 +38,41 @@ async def call_websocket_endpoint(websocket: WebSocket):
                 stt_ms = data.get("stt_latency_ms", 140.0)
                 resp = await orchestrator.process_caller_utterance(user_text, stt_ms)
                 await websocket.send_text(json.dumps(resp))
+
+            elif msg_type == "CALLER_AUDIO_CHUNK":
+                # Server-side STT (VN-STT): browser records ~2.5s self-contained
+                # webm/opus clips and sends each one here for local Whisper
+                # transcription, instead of relying on the browser's own
+                # Web Speech API recognizer.
+                if not orchestrator or not stt_service.available:
+                    await websocket.send_text(json.dumps({
+                        "type": "STT_ERROR",
+                        "session_id": session_id,
+                        "message": "Speech-to-text is unavailable right now. Please type your response.",
+                        "degraded": True
+                    }))
+                else:
+                    try:
+                        audio_bytes = base64.b64decode(data.get("audio_base64", ""))
+                        lang = get_whisper_language_code(orchestrator.fsm.language)
+                        result = await stt_service.transcribe(audio_bytes, language=lang)
+                        resp_type = "STT_RESULT" if data.get("is_final") else "STT_PARTIAL_RESULT"
+                        await websocket.send_text(json.dumps({
+                            "type": resp_type,
+                            "session_id": session_id,
+                            "text": result["text"],
+                            "confidence": result["confidence"],
+                            "stt_ms": result["stt_ms"],
+                            "degraded": False
+                        }))
+                    except Exception as e:
+                        print(f"[websocket_call] STT transcription failed: {e}")
+                        await websocket.send_text(json.dumps({
+                            "type": "STT_ERROR",
+                            "session_id": session_id,
+                            "message": "Could not process that audio. Please try again or type your response.",
+                            "degraded": True
+                        }))
 
             elif msg_type in ["RTC_OFFER", "RTC_ANSWER", "RTC_ICE_CANDIDATE", "CALLER_VOICE_STREAM", "CALLER_LIVE_SPEECH"]:
                 # Relay WebRTC signaling and audio data directly to live agent

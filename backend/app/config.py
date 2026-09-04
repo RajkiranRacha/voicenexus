@@ -75,6 +75,12 @@ class VoiceNexusConfig(BaseModel):
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
+    # Local Speech-To-Text (VN-STT): server-side transcription via faster-whisper,
+    # running fully offline/on-CPU so caller speech recognition doesn't depend on
+    # the browser's opaque Web Speech API.
+    STT_ENABLED: bool = True
+    STT_MODEL_SIZE: str = "base"  # tiny|base|small|medium|large-v3 — accuracy vs CPU-latency tradeoff
+
 def get_voice_for_language(lang: str, default_voice: str) -> str:
     if lang.startswith("es"):
         if default_voice and (default_voice.startswith("es-") or "Paloma" in default_voice or "Alonso" in default_voice):
@@ -88,6 +94,11 @@ def get_voice_for_language(lang: str, default_voice: str) -> str:
         if default_voice and default_voice.startswith("en-"):
             return default_voice
         return config.DEFAULT_VOICE if config.DEFAULT_VOICE.startswith("en-") else "en-US-JennyNeural"
+
+def get_whisper_language_code(lang: str) -> str:
+    """BCP-47 locale prefixes ("en-US", "es-US", "hi-IN") already are the
+    ISO 639-1 codes faster-whisper expects ("en", "es", "hi")."""
+    return lang.split("-")[0].lower() if lang else "en"
 
 config = VoiceNexusConfig()
 

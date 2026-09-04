@@ -59,7 +59,10 @@ export const PhoneSimulator: React.FC = () => {
   const activeAni = customAni.trim() || selectedAni;
 
   const call = useCallWebSocket(agentAudioRef);
-  const speech = useSpeechRecognition(call.callLanguage, setInputText, setInputText);
+  const speech = useSpeechRecognition(
+    call.callLanguage, setInputText, setInputText,
+    call.sendAudioChunk, call.sttPartial, call.sttFinal,
+  );
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -375,8 +378,8 @@ export const PhoneSimulator: React.FC = () => {
             {speech.isListening && (
               <div className="text-[11px] text-indigo-300">Listening — review the text below before sending, in case it mis-heard you.</div>
             )}
-            {speech.error && (
-              <div className="text-[11px] text-rose-400">{speech.error}</div>
+            {(speech.error || call.sttError) && (
+              <div className="text-[11px] text-rose-400">{speech.error || call.sttError}</div>
             )}
             <div className="flex space-x-2">
               <button

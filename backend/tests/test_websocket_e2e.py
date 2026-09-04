@@ -1,7 +1,29 @@
+import io
 import json
+import base64
 import pytest
+import numpy as np
+import av
 from fastapi.testclient import TestClient
 from app.main import app
+from app.services.stt import stt_service
+
+
+def _make_webm_opus_clip(seconds: float = 1.0) -> bytes:
+    sample_rate = 48000
+    t = np.linspace(0, seconds, int(sample_rate * seconds), endpoint=False)
+    samples = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+    buf = io.BytesIO()
+    container = av.open(buf, mode="w", format="webm")
+    stream = container.add_stream("libopus", rate=sample_rate)
+    frame = av.AudioFrame.from_ndarray(samples.reshape(1, -1), format="fltp", layout="mono")
+    frame.rate = sample_rate
+    for packet in stream.encode(frame):
+        container.mux(packet)
+    for packet in stream.encode(None):
+        container.mux(packet)
+    container.close()
+    return buf.getvalue()
 
 def test_websocket_caller_ai_and_live_agent_voice_bridge():
     client = TestClient(app)
@@ -101,3 +123,52 @@ def test_websocket_caller_ai_and_live_agent_voice_bridge():
 
             agent_end = json.loads(agent_ws.receive_text())
             assert agent_end['type'] == 'CALL_ENDED'
+
+
+@pytest.mark.skipif(not stt_service.available, reason="Local Whisper model unavailable in this environment")
+def test_websocket_caller_audio_chunk_returns_stt_result():
+    client = TestClient(app)
+
+    with client.websocket_connect('/ws/call') as caller_ws:
+        caller_ws.send_text(json.dumps({'type': 'START_CALL', 'ani': '+15550192834'}))
+        session_resp = json.loads(caller_ws.receive_text())
+        assert session_resp['type'] == 'SESSION_STARTED'
+
+        clip_base64 = base64.b64encode(_make_webm_opus_clip()).decode('utf-8')
+
+        caller_ws.send_text(json.dumps({
+            'type': 'CALLER_AUDIO_CHUNK',
+            'audio_base64': clip_base64,
+            'mime_type': 'audio/webm;codecs=opus',
+            'is_final': False
+        }))
+        partial_resp = json.loads(caller_ws.receive_text())
+        assert partial_resp['type'] == 'STT_PARTIAL_RESULT'
+        assert 'text' in partial_resp
+        assert 0.0 <= partial_resp['confidence'] <= 1.0
+        assert partial_resp['stt_ms'] > 0.0
+
+        caller_ws.send_text(json.dumps({
+            'type': 'CALLER_AUDIO_CHUNK',
+            'audio_base64': clip_base64,
+            'mime_type': 'audio/webm;codecs=opus',
+            'is_final': True
+        }))
+        final_resp = json.loads(caller_ws.receive_text())
+        assert final_resp['type'] == 'STT_RESULT'
+        assert final_resp['degraded'] is False
+
+
+def test_websocket_caller_audio_chunk_before_start_call_returns_stt_error():
+    client = TestClient(app)
+
+    with client.websocket_connect('/ws/call') as caller_ws:
+        caller_ws.send_text(json.dumps({
+            'type': 'CALLER_AUDIO_CHUNK',
+            'audio_base64': base64.b64encode(b'not-real-audio').decode('utf-8'),
+            'mime_type': 'audio/webm;codecs=opus',
+            'is_final': True
+        }))
+        resp = json.loads(caller_ws.receive_text())
+        assert resp['type'] == 'STT_ERROR'
+        assert resp['degraded'] is True
