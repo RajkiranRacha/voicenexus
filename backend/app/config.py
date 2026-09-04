@@ -79,7 +79,15 @@ class VoiceNexusConfig(BaseModel):
     # running fully offline/on-CPU so caller speech recognition doesn't depend on
     # the browser's opaque Web Speech API.
     STT_ENABLED: bool = True
-    STT_MODEL_SIZE: str = "base"  # tiny|base|small|medium|large-v3 — accuracy vs CPU-latency tradeoff
+    # tiny|base|small|medium|large-v3 — accuracy vs CPU-latency tradeoff. "base"
+    # was fast (~1-1.5s/chunk) but consistently misheard words under real
+    # conditions (e.g. "bill" -> "build"/"guild" on every attempt); "small"
+    # fixed that in live testing at the cost of ~3-4s/chunk on CPU, which will
+    # push the STT figure past this demo's 1000ms turn-latency SLO display -
+    # an accepted trade-off since a fast wrong transcript is worse than a
+    # slower correct one.
+    STT_MODEL_SIZE: str = "small"
+    STT_DEBUG_LOGGING: bool = False  # per-segment accept/reject diagnostics to server console
 
 def get_voice_for_language(lang: str, default_voice: str) -> str:
     if lang.startswith("es"):
