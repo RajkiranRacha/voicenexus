@@ -2,7 +2,34 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.types import Scope
+from starlette.responses import Response
 from app.config import config
+
+
+class SPAStaticFiles(StaticFiles):
+    """
+    Vite's build hashes every JS/CSS filename (e.g. assets/index-CX4G6Vq3.js),
+    so those can be cached forever -- but the default StaticFiles response has
+    no explicit Cache-Control at all, which leaves browsers free to apply
+    their own (often long) heuristic caching to index.html. Since index.html
+    is what points at the current hashed bundle, a stale cached copy of it
+    silently keeps serving an old JS bundle after every rebuild/deploy, with
+    no visible error -- clicks land in dead code with no console output.
+    Force index.html (and any HTML-mode fallback) to always revalidate,
+    while hashed assets stay immutable.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        # StaticFiles.get_path() joins with os.path.join, so on Windows this
+        # is backslash-separated -- normalize before matching.
+        normalized = path.replace("\\", "/").lstrip("/")
+        if normalized.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 from app.api.routes.telemetry import router as telemetry_router
 from app.api.routes.agent import router as agent_router
 from app.api.routes.admin import router as admin_router
@@ -46,7 +73,7 @@ def health_check():
 # Mount built frontend static files if present
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
 if os.path.exists(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+    app.mount("/", SPAStaticFiles(directory=frontend_dist, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
