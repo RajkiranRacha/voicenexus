@@ -35,5 +35,6 @@
   "GEMINI_API_KEY": "",
   "OPENAI_API_KEY": "",
   "STT_ENABLED": true,
-  "STT_MODEL_SIZE": "base"
+  "STT_MODEL_SIZE": "base",
+  "STT_DEBUG_LOGGING": true
 }

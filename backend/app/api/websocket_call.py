@@ -65,6 +65,13 @@ async def call_websocket_endpoint(websocket: WebSocket):
                             "stt_ms": result["stt_ms"],
                             "degraded": False
                         }))
+                    except WebSocketDisconnect:
+                        # The client may disconnect while a transcription is
+                        # still in flight; let the outer handler run the
+                        # normal disconnect/telemetry cleanup instead of
+                        # treating this as an STT failure and attempting to
+                        # send an error response on the closed socket.
+                        raise
                     except Exception as e:
                         print(f"[websocket_call] STT transcription failed: {e}")
                         await websocket.send_text(json.dumps({
