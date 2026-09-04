@@ -56,6 +56,7 @@ export const PhoneSimulator: React.FC = () => {
   const [autoPlayAudio, setAutoPlayAudio] = useState<boolean>(true);
   const [callLanguage, setCallLanguage] = useState<string>('en-US');
   const [isListening, setIsListening] = useState<boolean>(false);
+  const [audioDegraded, setAudioDegraded] = useState<boolean>(false);
 
   // Live Agent Connection States
   const [connectedAgent, setConnectedAgent] = useState<{ id: string; name: string } | null>(null);
@@ -235,6 +236,7 @@ export const PhoneSimulator: React.FC = () => {
               setLatestLatency(data.turn.latency);
             }
           }
+          setAudioDegraded(!!data.audio_degraded);
           if (data.audio_base64 && autoPlayAudio) {
             playAudioBase64(data.audio_base64);
           }
@@ -248,6 +250,7 @@ export const PhoneSimulator: React.FC = () => {
           if (data.escalated) {
             setCallState('ESCALATED');
           }
+          setAudioDegraded(!!data.audio_degraded);
           if (data.audio_base64 && autoPlayAudio) {
             playAudioBase64(data.audio_base64);
           }
@@ -677,6 +680,15 @@ export const PhoneSimulator: React.FC = () => {
               <span className="text-[11px] text-cyan-400 flex items-center space-x-1.5 animate-pulse">
                 <Volume2 className="w-3.5 h-3.5" />
                 <span>VoiceNexus is speaking...</span>
+              </span>
+            )}
+            {audioDegraded && (
+              <span
+                className="text-[11px] text-amber-400 flex items-center space-x-1.5"
+                title="Neural voice synthesis is temporarily unavailable. Continuing in degraded text/DTMF mode per reliability SLO."
+              >
+                <MicOff className="w-3.5 h-3.5" />
+                <span>Degraded mode: voice audio unavailable, text/DTMF still active</span>
               </span>
             )}
           </div>

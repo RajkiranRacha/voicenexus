@@ -130,6 +130,75 @@ def test_regulatory_disclosure_and_bilingual_switch():
     assert "He cambiado el idioma a español" in resp
     assert session.language == "es-US"
 
+def test_billing_flow_responds_in_spanish_after_language_switch():
+    # Regression: language switch must carry through into subflow responses, not just the greeting.
+    # Uses Marcus Brody's account/ANI (untouched by other tests' payment mutations) to avoid
+    # cross-test balance interference from the shared in-memory BssOssService singleton.
+    session = CallSessionStateMachine(session_id="test-session-es-billing", ani="+15550173399")
+    session.get_greeting()
+    session.process_turn("Quiero hablar en español")
+    assert session.language == "es-US"
+
+    resp, state, esc = session.process_turn("¿Cuál es el saldo de mi factura?")
+    assert state == CallState.SUBFLOW_EXECUTION
+    assert "$220.00" in resp
+    assert esc is None
+    # Response must actually be in Spanish, not the English template
+    assert "saldo" in resp.lower() or "factura" in resp.lower()
+    assert "current account balance" not in resp.lower()
+
+def test_outage_flow_responds_in_hindi_after_language_switch():
+    session = CallSessionStateMachine(session_id="test-session-hi-outage", ani="+15550148821")
+    session.get_greeting()
+    session.process_turn("Switch to Hindi")
+    assert session.language == "hi-IN"
+
+    resp, state, esc = session.process_turn("मेरा इंटरनेट नहीं चल रहा है")
+    assert state == CallState.SUBFLOW_EXECUTION
+    assert esc is None
+    assert "outage" not in resp.lower()
+    assert "बहाली" in resp or "सेवा" in resp
+
+def test_step_up_otp_is_issued_and_verifiable():
+    # Issue: identity_service.issue_step_up_otp existed but was never wired into the
+    # conversation, so the SMS/MFA verification path was unreachable in practice.
+    from app.services.identity import identity_service
+
+    session = CallSessionStateMachine(session_id="test-session-otp", ani="+15559990000")
+    greeting = session.get_greeting()
+    assert session.state == CallState.AUTH_CHALLENGE
+
+    resp, state, esc = session.process_turn("Please text me a code")
+    assert state == CallState.AUTH_CHALLENGE
+    assert "verification code" in resp.lower()
+
+    issued_code = identity_service.get_active_otp("+15559990000")
+    assert issued_code is not None
+    assert len(issued_code) == 4
+
+    resp2, state2, esc2 = session.process_turn(issued_code)
+    assert state2 == CallState.INTENT_ROUTING
+
+def test_step_up_otp_attaches_account_when_phone_matches_subscriber():
+    # If the OTP-verified phone number does resolve to a known subscriber, the
+    # session must attach that account (mirrors KBA verification behavior).
+    from app.services.identity import identity_service
+
+    session = CallSessionStateMachine(session_id="test-session-otp-2", ani="+15550192834")
+    session.get_greeting()
+    assert session.account is not None  # ANI already matched, not exercising AUTH_CHALLENGE
+
+    # Force a fresh OTP challenge scenario against the same known subscriber phone
+    session.account = None
+    session.state = CallState.AUTH_CHALLENGE
+    identity_service.issue_step_up_otp("+15550192834")
+    code = identity_service.get_active_otp("+15550192834")
+
+    resp, state, esc = session.process_turn(code)
+    assert state == CallState.INTENT_ROUTING
+    assert session.account is not None
+    assert session.account.customer_name == "Jordan Rivera"
+
 def test_pronunciation_overrides():
     from app.services.tts import tts_service
     raw_text = "Your ONT terminal is transmitting 1 Gbps with VoIP enabled via SMS"
