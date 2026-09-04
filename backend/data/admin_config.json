@@ -27,6 +27,8 @@
   "HOLD_PROMPT": "Please hold for just a moment while I pull up your account records.",
   "CLOSE_PROMPT": "Thank you for being a valued NexusFiber customer. Have a great day!",
   "ESCALATION_PROMPT": "I want to make sure this gets resolved correctly. I am transferring you to one of our care specialists right now. I've sent them your verified details so you won't have to repeat yourself.",
+  "DEFAULT_DEMO_ANI": "+15550192834",
+  "DEFAULT_OUTAGE_DEMO_ANI": "+15550148821",
   "MAX_UNRECOGNIZED_TURNS": 2,
   "CONFIRMATION_REQUIRED_FOR_ACTIONS": true,
   "TARGET_LATENCY_MS": 1000,

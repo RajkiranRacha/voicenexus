@@ -6,6 +6,8 @@ from typing import AsyncGenerator, Optional
 import edge_tts
 from app.config import config
 
+PITCH_PATTERN = re.compile(r"^[+-]\d+Hz$")
+
 class NeuralTtsService:
     """
     Streaming Neural Text-To-Speech Service (VN-7).
@@ -45,6 +47,11 @@ class NeuralTtsService:
         selected_voice = voice_override or self.voice or config.DEFAULT_VOICE
         selected_rate = rate_override or self.rate or config.VOICE_RATE
         selected_pitch = self.pitch or config.VOICE_PITCH
+        # edge-tts requires a signed Hz offset (e.g. "+0Hz"); any other format
+        # raises inside edge_tts.Communicate() and would otherwise silently
+        # degrade every call to text-only mode.
+        if not PITCH_PATTERN.match(selected_pitch):
+            selected_pitch = "+0Hz"
         communicate = edge_tts.Communicate(
             text=clean_text,
             voice=selected_voice,

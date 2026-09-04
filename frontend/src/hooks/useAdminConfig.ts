@@ -128,7 +128,7 @@ export function useAdminConfig() {
       apiPost('/api/admin/voice', {
         voice_name: selectedVoice,
         rate: speechRate,
-        pitch: "+0%",
+        pitch: "+0Hz",
         language: language
       }),
       apiPost('/api/admin/prompts', {
