@@ -59,7 +59,7 @@ export const PhoneSimulator: React.FC = () => {
   const activeAni = customAni.trim() || selectedAni;
 
   const call = useCallWebSocket(agentAudioRef);
-  const speech = useSpeechRecognition(call.callLanguage, (transcript) => call.sendUtterance(transcript, setInputText));
+  const speech = useSpeechRecognition(call.callLanguage, setInputText, setInputText);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -371,39 +371,47 @@ export const PhoneSimulator: React.FC = () => {
           </div>
 
           {/* Custom Caller Speech Input with Microphone */}
-          <div className="mt-3 pt-3 border-t border-slate-800 flex space-x-2">
-            <button
-              type="button"
-              disabled={call.callState !== 'IN_CALL'}
-              onClick={speech.toggleListening}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all ${
-                speech.isListening
-                  ? 'bg-rose-600 text-white animate-pulse'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              } disabled:opacity-40 cursor-pointer`}
-              title="Speak into microphone via Web Speech API"
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span>{speech.isListening ? 'Listening...' : 'Voice Mic'}</span>
-            </button>
+          <div className="mt-3 pt-3 border-t border-slate-800 flex flex-col space-y-1.5">
+            {speech.isListening && (
+              <div className="text-[11px] text-indigo-300">Listening — review the text below before sending, in case it mis-heard you.</div>
+            )}
+            {speech.error && (
+              <div className="text-[11px] text-rose-400">{speech.error}</div>
+            )}
+            <div className="flex space-x-2">
+              <button
+                type="button"
+                disabled={call.callState !== 'IN_CALL'}
+                onClick={speech.toggleListening}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all ${
+                  speech.isListening
+                    ? 'bg-rose-600 text-white animate-pulse'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                } disabled:opacity-40 cursor-pointer`}
+                title="Speak into microphone via Web Speech API"
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>{speech.isListening ? 'Listening...' : 'Voice Mic'}</span>
+              </button>
 
-            <input
-              type="text"
-              disabled={call.callState !== 'IN_CALL'}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendUtterance(inputText)}
-              placeholder={call.callState === 'IN_CALL' ? "Speak or type as caller (e.g., 'How much is my bill?')..." : "Start call to speak"}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-            />
-            <button
-              disabled={call.callState !== 'IN_CALL' || !inputText.trim()}
-              onClick={() => sendUtterance(inputText)}
-              className="px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Send</span>
-            </button>
+              <input
+                type="text"
+                disabled={call.callState !== 'IN_CALL'}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendUtterance(inputText)}
+                placeholder={call.callState === 'IN_CALL' ? "Speak or type as caller (e.g., 'How much is my bill?')..." : "Start call to speak"}
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+              />
+              <button
+                disabled={call.callState !== 'IN_CALL' || !inputText.trim()}
+                onClick={() => sendUtterance(inputText)}
+                className="px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Send</span>
+              </button>
+            </div>
           </div>
         </div>
 
