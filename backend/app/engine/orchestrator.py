@@ -26,6 +26,23 @@ class DialogueOrchestrator:
         self.turn_counter = 0
         telemetry_service.record_call_start(session_id, ani)
 
+    async def _synthesize_safe(self, text: str) -> Any:
+        """
+        Wraps neural TTS synthesis so a transient failure (e.g. the upstream
+        speech service is unreachable) degrades gracefully instead of crashing
+        the turn. Per PRD Reliability NFR: 'degraded mode retains IVR menu
+        fallback' -- the caller still gets the text response and can continue
+        via DTMF/text even if voice audio could not be generated this turn.
+        """
+        try:
+            voice_override = get_voice_for_language(self.fsm.language, config.DEFAULT_VOICE)
+            return await tts_service.synthesize_to_base64(
+                text, voice_override=voice_override, rate_override=config.VOICE_RATE
+            )
+        except Exception as e:
+            print(f"[DialogueOrchestrator] Degraded mode: TTS synthesis failed ({e}). Falling back to text-only turn.")
+            return None
+
     async def start_session(self) -> Dict[str, Any]:
         """
         Executes initial greeting, ANI lookup, and synthesis of welcome prompt.
@@ -35,10 +52,7 @@ class DialogueOrchestrator:
         
         # Measure TTS synthesis time
         tts_start = time.perf_counter()
-        voice_override = get_voice_for_language(self.fsm.language, config.DEFAULT_VOICE)
-        audio_base64 = await tts_service.synthesize_to_base64(
-            greeting_text, voice_override=voice_override, rate_override=config.VOICE_RATE
-        )
+        audio_base64 = await self._synthesize_safe(greeting_text)
         tts_ms = round((time.perf_counter() - tts_start) * 1000, 1)
 
         ai_turn = DialogueTurn(
@@ -66,6 +80,7 @@ class DialogueOrchestrator:
             "caller_account": self.fsm.account.model_dump() if self.fsm.account else None,
             "turn": ai_turn.model_dump(),
             "audio_base64": audio_base64,
+            "audio_degraded": audio_base64 is None,
             "state": self.fsm.state.value,
             "language": self.fsm.language
         }
@@ -109,10 +124,7 @@ class DialogueOrchestrator:
 
         # 3. Generate Speech Audio via Neural TTS
         tts_start = time.perf_counter()
-        voice_override = get_voice_for_language(self.fsm.language, config.DEFAULT_VOICE)
-        audio_base64 = await tts_service.synthesize_to_base64(
-            response_text, voice_override=voice_override, rate_override=config.VOICE_RATE
-        )
+        audio_base64 = await self._synthesize_safe(response_text)
         tts_ms = round((time.perf_counter() - tts_start) * 1000, 1)
 
         total_ms = round((time.perf_counter() - turn_start) * 1000 + simulated_stt_ms, 1)
@@ -155,6 +167,7 @@ class DialogueOrchestrator:
             "session_id": self.session_id,
             "turn": ai_turn.model_dump(),
             "audio_base64": audio_base64,
+            "audio_degraded": audio_base64 is None,
             "state": new_state.value,
             "escalated": bool(escalation_payload),
             "escalation_payload": escalation_payload.model_dump() if escalation_payload else None

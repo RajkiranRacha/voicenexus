@@ -149,6 +149,8 @@ class CallSessionStateMachine:
             phone_to_check = self.account.phone_number if self.account else self.ani
             if digits and identity_service.verify_step_up_otp(phone_to_check, digits):
                 self.state = CallState.INTENT_ROUTING
+                if not self.account:
+                    self.account = bss_service.get_account_by_phone(phone_to_check)
                 if self.pending_intent:
                     pending = self.pending_intent
                     self.pending_intent = None
@@ -159,10 +161,22 @@ class CallSessionStateMachine:
                     None
                 )
 
+            # Explicit request for a texted verification code (step-up OTP, VN-3)
+            if any(w in lowered for w in ["text me a code", "send me a code", "send a code", "text code", "verification code", "enviar código", "mandar código"]):
+                phone_to_text = self.account.phone_number if self.account else self.ani
+                identity_service.issue_step_up_otp(phone_to_text)
+                return (
+                    "I've sent a 4-digit verification code by text message to the phone number on file. "
+                    "Please read that code back to me now.",
+                    self.state,
+                    None
+                )
+
             # If not matched
             return (
                 "I couldn't locate an account with that information. Please speak or enter your 6-digit account number, "
-                "your 5-digit billing ZIP code, or say 'agent' to speak with customer care.",
+                "your 5-digit billing ZIP code, say 'text me a code' to receive a verification code by SMS, "
+                "or say 'agent' to speak with customer care.",
                 self.state,
                 None
             )
@@ -362,7 +376,7 @@ class CallSessionStateMachine:
         # Fallback account if caller ANI not pre-registered
         acc = self.account or bss_service.get_account_by_phone("+15550192834")
         response, is_resolved, should_escalate, updated_ctx = BillingFlow.handle_turn(
-            user_text, acc, self.flow_context
+            user_text, acc, self.flow_context, language=self.language
         )
         self.flow_context = updated_ctx
         if should_escalate:
@@ -377,7 +391,7 @@ class CallSessionStateMachine:
     def _execute_outage_turn(self, user_text: str):
         acc = self.account or bss_service.get_account_by_phone("+15550148821")
         response, is_resolved, should_escalate, updated_ctx = OutageTriageFlow.handle_turn(
-            user_text, acc, self.flow_context
+            user_text, acc, self.flow_context, language=self.language
         )
         self.flow_context = updated_ctx
         if should_escalate:
@@ -392,7 +406,7 @@ class CallSessionStateMachine:
     def _execute_plan_turn(self, user_text: str):
         acc = self.account or bss_service.get_account_by_phone("+15550192834")
         response, is_resolved, should_escalate, updated_ctx = PlanFlow.handle_turn(
-            user_text, acc, self.flow_context
+            user_text, acc, self.flow_context, language=self.language
         )
         self.flow_context = updated_ctx
         if should_escalate:
@@ -407,7 +421,7 @@ class CallSessionStateMachine:
     def _execute_callback_turn(self, user_text: str):
         acc = self.account or bss_service.get_account_by_phone("+15550192834")
         response, is_resolved, should_escalate, updated_ctx = CallbackFlow.handle_turn(
-            user_text, acc, self.flow_context
+            user_text, acc, self.flow_context, language=self.language
         )
         self.flow_context = updated_ctx
         if should_escalate:

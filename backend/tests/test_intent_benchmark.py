@@ -87,7 +87,20 @@ EVAL_DATASET = [
     # UNKNOWN (Out of domain / gibberish)
     ("What is the weather in Honolulu today?", IntentEnum.UNKNOWN),
     ("Tell me a recipe for chocolate chip cookies", IntentEnum.UNKNOWN),
-    ("blorp zip zop flim flam", IntentEnum.UNKNOWN)
+    ("blorp zip zop flim flam", IntentEnum.UNKNOWN),
+
+    # Hindi (hi-IN) — task intents
+    ("मेरा बिल कितना है?", IntentEnum.BILLING_INQUIRY),
+    ("मेरा बकाया कितना है", IntentEnum.BILLING_INQUIRY),
+    ("मुझे अभी अपने कार्ड से भुगतान करना है", IntentEnum.PAY_BILL_NOW),
+    ("मुझे बाद में भुगतान करने के लिए समय चाहिए", IntentEnum.PAYMENT_PROMISE),
+    ("मेरा इंटरनेट नहीं चल रहा है", IntentEnum.OUTAGE_TRIAGE),
+    ("वाईफाई काम नहीं कर रहा", IntentEnum.OUTAGE_TRIAGE),
+    ("मेरा प्लान क्या है", IntentEnum.PLAN_INQUIRY),
+    ("मुझे तेज़ स्पीड में अपग्रेड करना है", IntentEnum.PLAN_UPGRADE),
+    ("मुझे वापस कॉल करें", IntentEnum.CALLBACK_SCHEDULE),
+    ("मुझे किसी एजेंट से बात करनी है", IntentEnum.AGENT_ESCALATION),
+    ("मुझे एक इंसान से बात करनी है", IntentEnum.AGENT_ESCALATION),
 ]
 
 def test_intent_classification_f1_benchmark():
