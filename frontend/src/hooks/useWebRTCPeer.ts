@@ -56,13 +56,26 @@ export function useWebRTCPeer({ onIceCandidate, onRemoteStream }: UseWebRTCPeerO
     }
   }, []);
 
+  /**
+   * Adds the local mic track when available; otherwise explicitly negotiates
+   * a recvonly audio transceiver. Without this, a peer connection that never
+   * calls addTrack() (e.g. the agent's mic permission was denied/unavailable)
+   * won't negotiate an audio m-line at all, silently breaking audio in BOTH
+   * directions instead of just the side missing a microphone.
+   */
+  const attachLocalAudio = (pc: RTCPeerConnection, stream: MediaStream | null) => {
+    if (stream) {
+      stream.getAudioTracks().forEach(track => pc.addTrack(track, stream));
+    } else {
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
+  };
+
   /** Offerer role (agent desktop): capture mic, create + set local offer. */
   const createOffer = useCallback(async (): Promise<RTCSessionDescriptionInit> => {
     const stream = await captureMicrophone();
     const pc = ensurePeerConnection();
-    if (stream) {
-      stream.getAudioTracks().forEach(track => pc.addTrack(track, stream));
-    }
+    attachLocalAudio(pc, stream);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     return offer;
@@ -72,9 +85,7 @@ export function useWebRTCPeer({ onIceCandidate, onRemoteStream }: UseWebRTCPeerO
   const answerOffer = useCallback(async (sdpOffer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> => {
     const stream = await captureMicrophone();
     const pc = ensurePeerConnection();
-    if (stream) {
-      stream.getAudioTracks().forEach(track => pc.addTrack(track, stream));
-    }
+    attachLocalAudio(pc, stream);
     await pc.setRemoteDescription(new RTCSessionDescription(sdpOffer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
