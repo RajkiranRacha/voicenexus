@@ -1,17 +1,31 @@
+import re
 from typing import Optional, Dict
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.config import config, save_persisted_config
 from app.services.tts import tts_service
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Config"])
 
+# edge-tts requires pitch as a signed Hz offset (e.g. "+0Hz"), not a percent
+# string like the rate field -- a mismatched format raises inside
+# edge_tts.Communicate() and silently degrades every subsequent call to
+# text-only mode (see NeuralTtsService._synthesize_safe).
+PITCH_PATTERN = re.compile(r"^[+-]\d+Hz$")
+
 
 class VoiceSettingsUpdate(BaseModel):
     voice_name: str
     rate: str = "+0%"
-    pitch: str = "+0%"
+    pitch: str = "+0Hz"
     language: str = "en-US"
+
+    @field_validator("pitch")
+    @classmethod
+    def validate_pitch(cls, v: str) -> str:
+        if not PITCH_PATTERN.match(v):
+            return "+0Hz"
+        return v
 
 
 class TenantPromptUpdate(BaseModel):
