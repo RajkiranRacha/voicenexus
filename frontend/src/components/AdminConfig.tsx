@@ -1,160 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { 
+import React, { useState } from 'react';
+import {
   Sliders, Mic, Building2, Save, Check, ShieldAlert, Volume2, Plus, Trash2
 } from 'lucide-react';
-import type { AdminConfigData } from '../types';
+import { useAdminConfig } from '../hooks/useAdminConfig';
 
 export const AdminConfig: React.FC = () => {
-  const [operatorName, setOperatorName] = useState<string>("NexusFiber Telco");
-  const [greetingPrompt, setGreetingPrompt] = useState<string>(
-    "Thank you for calling NexusFiber Care. I am your automated digital assistant. How can I help you today?"
-  );
-  const [spanishGreeting, setSpanishGreeting] = useState<string>(
-    "Gracias por llamar a NexusFiber Atención al Cliente. Soy su asistente digital automatizado. ¿Cómo le puedo ayudar hoy?"
-  );
-  const [hindiGreeting, setHindiGreeting] = useState<string>(
-    "NexusFiber में कॉल करने के लिए धन्यवाद। मैं आपका स्वचालित डिजिटल सहायक हूँ। मैं आज आपकी क्या सहायता कर सकता हूँ?"
-  );
-  const [holdPrompt, setHoldPrompt] = useState<string>(
-    "Please hold for just a moment while I pull up your account records."
-  );
-  const [closePrompt, setClosePrompt] = useState<string>(
-    "Thank you for being a valued NexusFiber customer. Have a great day!"
-  );
-  const [escalationPrompt, setEscalationPrompt] = useState<string>(
-    "I want to make sure this gets resolved correctly. I am transferring you to one of our care specialists right now. I've sent them your verified details so you won't have to repeat yourself."
-  );
-  const [disclosureEnabled, setDisclosureEnabled] = useState<boolean>(true);
-  const [disclosurePrompt, setDisclosurePrompt] = useState<string>(
-    "This call may be recorded for quality assurance and uses automated intelligence."
-  );
-  const [selectedVoice, setSelectedVoice] = useState<string>("en-US-JennyNeural");
-  const [speechRate, setSpeechRate] = useState<string>("+0%");
-  const [language, setLanguage] = useState<string>("en-US");
-  const [pronunciations, setPronunciations] = useState<Array<{ pattern: string; replace: string }>>([
-    { pattern: "\\bONT\\b", replace: "O-N-T" },
-    { pattern: "\\bVoIP\\b", replace: "Voice over I-P" },
-    { pattern: "\\bGbps\\b", replace: "gigabits per second" },
-    { pattern: "\\bMbps\\b", replace: "megabits per second" },
-    { pattern: "\\bSSID\\b", replace: "Wi-Fi network name" }
-  ]);
+  const cfg = useAdminConfig();
   const [newPattern, setNewPattern] = useState<string>("");
   const [newReplace, setNewReplace] = useState<string>("");
-  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
-  useEffect(() => {
-    // 1. Instant recovery from localStorage if present
-    try {
-      const cached = localStorage.getItem('voicenexus_admin_config');
-      if (cached) {
-        const d = JSON.parse(cached);
-        if (d.operator_name) setOperatorName(d.operator_name);
-        if (d.greeting_prompt) setGreetingPrompt(d.greeting_prompt);
-        if (d.spanish_greeting_prompt) setSpanishGreeting(d.spanish_greeting_prompt);
-        if (d.hindi_greeting_prompt) setHindiGreeting(d.hindi_greeting_prompt);
-        if (d.default_voice) setSelectedVoice(d.default_voice);
-        if (d.voice_rate) setSpeechRate(d.voice_rate);
-        if (d.language) setLanguage(d.language);
-      }
-    } catch {
-      // ignore JSON parse error
-    }
-
-    // 2. Fetch server authoritative configuration
-    fetch('/api/admin/config')
-      .then(res => res.json())
-      .then((data: AdminConfigData) => {
-        if (data) {
-          if (data.operator_name) setOperatorName(data.operator_name);
-          if (data.greeting_prompt) setGreetingPrompt(data.greeting_prompt);
-          if (data.spanish_greeting_prompt) setSpanishGreeting(data.spanish_greeting_prompt);
-          if (data.hindi_greeting_prompt) setHindiGreeting(data.hindi_greeting_prompt);
-          if (data.hold_prompt) setHoldPrompt(data.hold_prompt);
-          if (data.close_prompt) setClosePrompt(data.close_prompt);
-          if (data.escalation_prompt) setEscalationPrompt(data.escalation_prompt);
-          if (typeof data.regulatory_disclosure_enabled === 'boolean') {
-            setDisclosureEnabled(data.regulatory_disclosure_enabled);
-          }
-          if (data.regulatory_disclosure_prompt) {
-            setDisclosurePrompt(data.regulatory_disclosure_prompt);
-          }
-          if (data.default_voice) setSelectedVoice(data.default_voice);
-          if (data.voice_rate) setSpeechRate(data.voice_rate);
-          if (data.language) setLanguage(data.language);
-          if (data.pronunciation_overrides) {
-            const list = Object.entries(data.pronunciation_overrides).map(([pattern, replace]) => ({
-              pattern, replace
-            }));
-            setPronunciations(list);
-          }
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const addPronunciation = () => {
-    if (!newPattern.trim() || !newReplace.trim()) return;
-    setPronunciations(prev => [...prev, { pattern: newPattern.trim(), replace: newReplace.trim() }]);
+  const handleAddPronunciation = () => {
+    cfg.addPronunciation(newPattern, newReplace);
     setNewPattern("");
     setNewReplace("");
-  };
-
-  const removePronunciation = (idx: number) => {
-    setPronunciations(prev => prev.filter((_, i) => i !== idx));
-  };
-
-  const saveSettings = () => {
-    const overrideMap: Record<string, string> = {};
-    pronunciations.forEach(p => {
-      overrideMap[p.pattern] = p.replace;
-    });
-
-    // Cache locally
-    try {
-      localStorage.setItem('voicenexus_admin_config', JSON.stringify({
-        operator_name: operatorName,
-        greeting_prompt: greetingPrompt,
-        spanish_greeting_prompt: spanishGreeting,
-        hindi_greeting_prompt: hindiGreeting,
-        default_voice: selectedVoice,
-        voice_rate: speechRate,
-        language: language
-      }));
-    } catch {
-      // ignore
-    }
-
-    Promise.all([
-      fetch('/api/admin/voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          voice_name: selectedVoice, 
-          rate: speechRate, 
-          pitch: "+0%",
-          language: language
-        })
-      }),
-      fetch('/api/admin/prompts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          operator_name: operatorName, 
-          greeting_prompt: greetingPrompt,
-          spanish_greeting_prompt: spanishGreeting,
-          hindi_greeting_prompt: hindiGreeting,
-          hold_prompt: holdPrompt,
-          close_prompt: closePrompt,
-          escalation_prompt: escalationPrompt,
-          regulatory_disclosure_enabled: disclosureEnabled,
-          regulatory_disclosure_prompt: disclosurePrompt,
-          pronunciation_overrides: overrideMap
-        })
-      })
-    ]).then(() => {
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    });
   };
 
   return (
@@ -170,11 +28,11 @@ export const AdminConfig: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={saveSettings}
+          onClick={cfg.saveSettings}
           className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-2 shadow-lg shadow-indigo-950/40 transition-all cursor-pointer"
         >
-          {savedSuccess ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
-          <span>{savedSuccess ? 'Settings Applied!' : 'Save Configuration'}</span>
+          {cfg.savedSuccess ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
+          <span>{cfg.savedSuccess ? 'Settings Applied!' : 'Save Configuration'}</span>
         </button>
       </div>
 
@@ -190,8 +48,8 @@ export const AdminConfig: React.FC = () => {
             <div>
               <label className="text-xs font-medium text-slate-300 block mb-1.5">Active Neural Voice:</label>
               <select
-                value={selectedVoice}
-                onChange={(e) => setSelectedVoice(e.target.value)}
+                value={cfg.selectedVoice}
+                onChange={(e) => cfg.setSelectedVoice(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
               >
                 <optgroup label="English Neural Voices">
@@ -215,16 +73,16 @@ export const AdminConfig: React.FC = () => {
               <div>
                 <label className="text-xs font-medium text-slate-300 block mb-1.5">Primary Language:</label>
                 <select
-                  value={language}
+                  value={cfg.language}
                   onChange={(e) => {
                     const newLang = e.target.value;
-                    setLanguage(newLang);
-                    if (newLang === 'hi-IN' && !selectedVoice.startsWith('hi-')) {
-                      setSelectedVoice('hi-IN-SwaraNeural');
-                    } else if (newLang === 'es-US' && !selectedVoice.startsWith('es-')) {
-                      setSelectedVoice('es-US-PalomaNeural');
-                    } else if (newLang === 'en-US' && !selectedVoice.startsWith('en-')) {
-                      setSelectedVoice('en-US-JennyNeural');
+                    cfg.setLanguage(newLang);
+                    if (newLang === 'hi-IN' && !cfg.selectedVoice.startsWith('hi-')) {
+                      cfg.setSelectedVoice('hi-IN-SwaraNeural');
+                    } else if (newLang === 'es-US' && !cfg.selectedVoice.startsWith('es-')) {
+                      cfg.setSelectedVoice('es-US-PalomaNeural');
+                    } else if (newLang === 'en-US' && !cfg.selectedVoice.startsWith('en-')) {
+                      cfg.setSelectedVoice('en-US-JennyNeural');
                     }
                   }}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
@@ -236,10 +94,10 @@ export const AdminConfig: React.FC = () => {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-slate-300 block mb-1.5">Speech Rate ({speechRate}):</label>
+                <label className="text-xs font-medium text-slate-300 block mb-1.5">Speech Rate ({cfg.speechRate}):</label>
                 <select
-                  value={speechRate}
-                  onChange={(e) => setSpeechRate(e.target.value)}
+                  value={cfg.speechRate}
+                  onChange={(e) => cfg.setSpeechRate(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                 >
                   <option value="-25%">-25% (Slow & Deliberate)</option>
@@ -266,8 +124,8 @@ export const AdminConfig: React.FC = () => {
               </div>
               <input
                 type="checkbox"
-                checked={disclosureEnabled}
-                onChange={(e) => setDisclosureEnabled(e.target.checked)}
+                checked={cfg.disclosureEnabled}
+                onChange={(e) => cfg.setDisclosureEnabled(e.target.checked)}
                 className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
               />
             </div>
@@ -276,9 +134,9 @@ export const AdminConfig: React.FC = () => {
               <label className="text-xs font-medium text-slate-300 block mb-1.5">Disclosure Prompt Text:</label>
               <textarea
                 rows={2}
-                disabled={!disclosureEnabled}
-                value={disclosurePrompt}
-                onChange={(e) => setDisclosurePrompt(e.target.value)}
+                disabled={!cfg.disclosureEnabled}
+                value={cfg.disclosurePrompt}
+                onChange={(e) => cfg.setDisclosurePrompt(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 disabled:opacity-40"
               />
             </div>
@@ -298,8 +156,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Operator / Telco Name:</label>
             <input
               type="text"
-              value={operatorName}
-              onChange={(e) => setOperatorName(e.target.value)}
+              value={cfg.operatorName}
+              onChange={(e) => cfg.setOperatorName(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -308,8 +166,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Hold Prompt:</label>
             <input
               type="text"
-              value={holdPrompt}
-              onChange={(e) => setHoldPrompt(e.target.value)}
+              value={cfg.holdPrompt}
+              onChange={(e) => cfg.setHoldPrompt(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -318,8 +176,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Primary English Greeting Prompt:</label>
             <textarea
               rows={2}
-              value={greetingPrompt}
-              onChange={(e) => setGreetingPrompt(e.target.value)}
+              value={cfg.greetingPrompt}
+              onChange={(e) => cfg.setGreetingPrompt(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -328,8 +186,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Spanish Secondary Greeting Prompt:</label>
             <textarea
               rows={2}
-              value={spanishGreeting}
-              onChange={(e) => setSpanishGreeting(e.target.value)}
+              value={cfg.spanishGreeting}
+              onChange={(e) => cfg.setSpanishGreeting(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -338,8 +196,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Hindi Tertiary Greeting Prompt (हिन्दी):</label>
             <textarea
               rows={2}
-              value={hindiGreeting}
-              onChange={(e) => setHindiGreeting(e.target.value)}
+              value={cfg.hindiGreeting}
+              onChange={(e) => cfg.setHindiGreeting(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -348,8 +206,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Call Closing Prompt:</label>
             <input
               type="text"
-              value={closePrompt}
-              onChange={(e) => setClosePrompt(e.target.value)}
+              value={cfg.closePrompt}
+              onChange={(e) => cfg.setClosePrompt(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -358,8 +216,8 @@ export const AdminConfig: React.FC = () => {
             <label className="text-xs font-medium text-slate-300 block mb-1.5">Live Agent Escalation Transfer Prompt:</label>
             <input
               type="text"
-              value={escalationPrompt}
-              onChange={(e) => setEscalationPrompt(e.target.value)}
+              value={cfg.escalationPrompt}
+              onChange={(e) => cfg.setEscalationPrompt(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
             />
           </div>
@@ -377,7 +235,7 @@ export const AdminConfig: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-          {pronunciations.map((item, idx) => (
+          {cfg.pronunciations.map((item, idx) => (
             <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between text-xs">
               <div>
                 <span className="font-mono text-indigo-400 font-semibold">{item.pattern}</span>
@@ -385,7 +243,7 @@ export const AdminConfig: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => removePronunciation(idx)}
+                onClick={() => cfg.removePronunciation(idx)}
                 className="text-slate-500 hover:text-rose-400 transition-colors p-1 cursor-pointer"
                 title="Remove override"
               >
@@ -412,7 +270,7 @@ export const AdminConfig: React.FC = () => {
           />
           <button
             type="button"
-            onClick={addPronunciation}
+            onClick={handleAddPronunciation}
             className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />

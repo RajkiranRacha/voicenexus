@@ -36,6 +36,7 @@ class CallState(str, Enum):
     CONFIRMATION_PENDING = "CONFIRMATION_PENDING"
     RESOLVED_CONTAINED = "RESOLVED_CONTAINED"
     ESCALATING_TO_AGENT = "ESCALATING_TO_AGENT"
+    ABANDONED = "ABANDONED"
     CALL_ENDED = "CALL_ENDED"
 
 class LatencyMetrics(BaseModel):
@@ -83,10 +84,16 @@ class TelemetrySummary(BaseModel):
     active_calls: int = 0
     contained_calls: int = 0
     escalated_calls: int = 0
+    abandoned_calls: int = 0
     containment_rate_pct: float = 0.0
     transfer_rate_pct: float = 0.0
+    abandonment_rate_pct: float = 0.0
     avg_handle_time_automated_sec: float = 0.0
     avg_handle_time_escalated_sec: float = 0.0
     median_latency_ms: float = 0.0
+    latency_slo_target_ms: float = 0.0
+    latency_slo_breach_pct: float = 0.0
+    avg_csat: Optional[float] = None
+    csat_response_count: int = 0
     intent_distribution: Dict[str, int] = Field(default_factory=dict)
     escalation_reasons: Dict[str, int] = Field(default_factory=dict)

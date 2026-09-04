@@ -179,17 +179,29 @@ class DialogueOrchestrator:
         """
         self.is_interrupted = True
 
-    def _finalize_telemetry(self, is_escalated: bool, payload: Optional[EscalationPayload] = None):
+    def _finalize_telemetry(
+        self,
+        is_escalated: bool,
+        payload: Optional[EscalationPayload] = None,
+        is_abandoned: bool = False
+    ):
         duration = int((datetime.now() - self.fsm.start_time).total_seconds())
         acc = self.fsm.account
         intent_str = (
             self.fsm.current_intent.value
             if self.fsm.current_intent else "GENERAL_INQUIRY"
         )
-        
+
         # Calculate average turn latency for this session
         latencies = [t.latency.total_turn_ms for t in self.fsm.turns if t.latency]
         avg_lat = sum(latencies) / len(latencies) if latencies else 550.0
+
+        if is_abandoned:
+            final_state = CallState.ABANDONED.value
+        elif is_escalated:
+            final_state = CallState.ESCALATING_TO_AGENT.value
+        else:
+            final_state = CallState.RESOLVED_CONTAINED.value
 
         telemetry_service.record_completed_call(
             session_id=self.session_id,
@@ -198,7 +210,7 @@ class DialogueOrchestrator:
             customer_name=acc.customer_name if acc else "Unknown Caller",
             intent=intent_str,
             duration_sec=duration,
-            final_state=CallState.ESCALATING_TO_AGENT.value if is_escalated else CallState.RESOLVED_CONTAINED.value,
+            final_state=final_state,
             escalation_reason=payload.resolution_summary.get("failure_or_escalation_reason") if payload else None,
             avg_latency_ms=round(avg_lat, 1),
             turns_count=len(self.fsm.turns),

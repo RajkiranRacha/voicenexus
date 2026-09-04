@@ -8,6 +8,7 @@ from app.config import config
 from app.services.identity import identity_service
 from app.services.bss_oss import bss_service
 from app.engine.intent_classifier import intent_classifier
+from app.i18n import t
 from app.engine.flows.billing_flow import BillingFlow
 from app.engine.flows.outage_triage_flow import OutageTriageFlow
 from app.engine.flows.plan_flow import PlanFlow
@@ -43,44 +44,15 @@ class CallSessionStateMachine:
         if config.REGULATORY_DISCLOSURE_ENABLED:
             prefix = f"{config.REGULATORY_DISCLOSURE_PROMPT} "
 
-        if self.language.startswith("es"):
-            if self.account:
-                return (
-                    f"{prefix}Gracias por llamar a {config.OPERATOR_NAME}. Veo que se comunica desde la línea "
-                    f"asociada a la cuenta de {self.account.customer_name}. Soy su asistente digital. ¿En qué le puedo ayudar hoy?"
-                )
-            self.state = CallState.AUTH_CHALLENGE
-            return (
-                f"{prefix}Gracias por llamar a {config.OPERATOR_NAME}. No reconozco este número en nuestro sistema. "
-                "Para consultar sus registros, por favor dígame su número de cuenta o código postal de facturación."
-            )
-
-        if self.language.startswith("hi"):
-            if self.account:
-                return (
-                    f"{prefix}{config.OPERATOR_NAME} में कॉल करने के लिए धन्यवाद। मैं {self.account.customer_name} "
-                    f"के खाते से आपका स्वागत करता हूँ। मैं आपका डिजिटल सहायक हूँ। मैं आज आपकी क्या सहायता कर सकता हूँ?"
-                )
-            self.state = CallState.AUTH_CHALLENGE
-            return (
-                f"{prefix}{config.OPERATOR_NAME} में कॉल करने के लिए धन्यवाद। मैं आपका डिजिटल सहायक हूँ। "
-                "कृपया अपना 6-अंकों का खाता नंबर या 5-अंकों का बिलिंग पिन कोड बताएं।"
-            )
-
         if self.account:
-            return (
-                f"{prefix}Thank you for calling {config.OPERATOR_NAME}. I see you're calling from the number "
-                f"associated with {self.account.customer_name}'s account. I am your automated care assistant. "
-                "How can I help you today?"
+            return t(
+                "greeting.known_account", self.language,
+                prefix=prefix, operator_name=config.OPERATOR_NAME, customer_name=self.account.customer_name
             )
-        else:
-            # PRD VN-3: Caller ANI not matched in BSS -> Challenge for KBA
-            self.state = CallState.AUTH_CHALLENGE
-            return (
-                f"{prefix}Thank you for calling {config.OPERATOR_NAME}. I am your automated care assistant. "
-                "I don't recognize the phone number you are calling from. To pull up your account records, "
-                "could you please tell me your account number or 5-digit billing ZIP code?"
-            )
+
+        # PRD VN-3: Caller ANI not matched in BSS -> Challenge for KBA
+        self.state = CallState.AUTH_CHALLENGE
+        return t("greeting.unknown_ani", self.language, prefix=prefix, operator_name=config.OPERATOR_NAME)
 
     def process_turn(self, user_text: str) -> Tuple[str, CallState, Optional[EscalationPayload]]:
         lowered = user_text.lower().strip()
@@ -192,105 +164,20 @@ class CallSessionStateMachine:
                 "good", "fine", "nothing", "that's all", "thats all", "all set",
                 "no need", "bien", "nada más", "nada mas", "kuch nahi", "sab theek", "sab thik"
             ]):
-                if self.language.startswith("es"):
-                    return (
-                        "¡De nada! Si no necesita nada más, gracias por ser cliente de NexusFiber. ¡Que tenga un excelente día!",
-                        CallState.RESOLVED_CONTAINED,
-                        None
-                    )
-                elif self.language.startswith("hi"):
-                    return (
-                        "आपका बहुत-बहुत स्वागत है! यदि आपको और सहायता की आवश्यकता नहीं है, तो NexusFiber का ग्राहक बनने के लिए धन्यवाद। आपका दिन शुभ हो!",
-                        CallState.RESOLVED_CONTAINED,
-                        None
-                    )
-                else:
-                    return (
-                        "You're very welcome! If there's nothing else, thank you for being a valued NexusFiber customer. Have a wonderful day!",
-                        CallState.RESOLVED_CONTAINED,
-                        None
-                    )
-            if self.language.startswith("es"):
-                return (
-                    "¡Es un placer! ¿En qué más le puedo ayudar hoy? Puede consultar su factura, plan o reportar una avería.",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
-            elif self.language.startswith("hi"):
-                return (
-                    "आपका स्वागत है! आज मैं आपकी क्या सहायता कर सकता हूँ? आप बिल, प्लान या इंटरनेट समस्या की जानकारी ले सकते हैं।",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
-            else:
-                return (
-                    "You're very welcome! How can I assist you today? You can ask about your bill, current plan, or check for area outages.",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
+                return t("gratitude.closing", self.language), CallState.RESOLVED_CONTAINED, None
+            return t("gratitude.continue", self.language), CallState.INTENT_ROUTING, None
 
         if intent == IntentEnum.ACKNOWLEDGEMENT:
             self.consecutive_unrecognized = 0
-            if self.language.startswith("es"):
-                return (
-                    "Entendido. ¿En qué le puedo ayudar hoy? Puede consultar su factura, reportar averías o verificar su plan.",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
-            elif self.language.startswith("hi"):
-                return (
-                    "समझ गया। आज मैं आपकी क्या सहायता कर सकता हूँ? आप अपना बिल चेक कर सकते हैं या प्लान देख सकते हैं।",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
-            else:
-                return (
-                    "Understood. How can I help you today? You can check your bill, report an outage, or view your plan.",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
+            return t("acknowledgement.continue", self.language), CallState.INTENT_ROUTING, None
 
         if intent in [IntentEnum.CONFIRMATION, IntentEnum.CONFIRMATION_YES]:
             self.consecutive_unrecognized = 0
-            if self.language.startswith("es"):
-                return (
-                    "Excelente. ¿En qué le puedo ayudar hoy? Puede preguntar por su factura, hacer un pago o reportar problemas de red.",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
-            elif self.language.startswith("hi"):
-                return (
-                    "बहुत अच्छा! आज मैं आपकी क्या सहायता कर सकता हूँ? आप बिल, भुगतान या नेटवर्क की जानकारी ले सकते हैं।",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
-            else:
-                return (
-                    "Great! How can I help you today? You can ask about your bill, make a payment, or check for area outages.",
-                    CallState.INTENT_ROUTING,
-                    None
-                )
+            return t("confirmation.continue", self.language), CallState.INTENT_ROUTING, None
 
         if intent in [IntentEnum.REJECTION, IntentEnum.CONFIRMATION_NO]:
             self.consecutive_unrecognized = 0
-            if self.language.startswith("es"):
-                return (
-                    "Entendido. Si no necesita nada más, gracias por llamar a NexusFiber. ¡Que tenga un buen día!",
-                    CallState.RESOLVED_CONTAINED,
-                    None
-                )
-            elif self.language.startswith("hi"):
-                return (
-                    "समझ गया। यदि आपको और सहायता नहीं चाहिए, तो NexusFiber में कॉल करने के लिए धन्यवाद। आपका दिन शुभ हो!",
-                    CallState.RESOLVED_CONTAINED,
-                    None
-                )
-            else:
-                return (
-                    "Understood. If there is nothing else, thank you for calling NexusFiber. Have a great day!",
-                    CallState.RESOLVED_CONTAINED,
-                    None
-                )
+            return t("rejection.closing", self.language), CallState.RESOLVED_CONTAINED, None
 
         # 6. Intent Routing Phase
         if intent in [
@@ -312,25 +199,7 @@ class CallSessionStateMachine:
                 notes=f"Caller intent not recognized after {self.consecutive_unrecognized} attempts. Last utterance: '{user_text}'"
             )
 
-        if self.language.startswith("es"):
-            return (
-                "Disculpe, no le entendí bien. Le puedo ayudar con su factura, hacer un pago, verificar averías o revisar su plan.",
-                CallState.INTENT_ROUTING,
-                None
-            )
-        elif self.language.startswith("hi"):
-            return (
-                "माफ़ कीजिए, मैं समझ नहीं पाया। मैं बिल चेक करने, भुगतान करने, आउटेज देखने या प्लान बदलने में मदद कर सकता हूँ।",
-                CallState.INTENT_ROUTING,
-                None
-            )
-
-        return (
-            "I didn't quite catch that. I can help you check your bill, make a payment, "
-            "check for internet outages, or review your plan. How can I assist?",
-            CallState.INTENT_ROUTING,
-            None
-        )
+        return t("unrecognized.retry", self.language), CallState.INTENT_ROUTING, None
 
     def _route_intent(self, intent: IntentEnum, user_text: str) -> Tuple[str, CallState, Optional[EscalationPayload]]:
         self.current_intent = intent
@@ -374,7 +243,7 @@ class CallSessionStateMachine:
 
     def _execute_billing_turn(self, user_text: str):
         # Fallback account if caller ANI not pre-registered
-        acc = self.account or bss_service.get_account_by_phone("+15550192834")
+        acc = self.account or bss_service.get_account_by_phone(config.DEFAULT_DEMO_ANI)
         response, is_resolved, should_escalate, updated_ctx = BillingFlow.handle_turn(
             user_text, acc, self.flow_context, language=self.language
         )
@@ -389,7 +258,7 @@ class CallSessionStateMachine:
         return response, self.state, None
 
     def _execute_outage_turn(self, user_text: str):
-        acc = self.account or bss_service.get_account_by_phone("+15550148821")
+        acc = self.account or bss_service.get_account_by_phone(config.DEFAULT_OUTAGE_DEMO_ANI)
         response, is_resolved, should_escalate, updated_ctx = OutageTriageFlow.handle_turn(
             user_text, acc, self.flow_context, language=self.language
         )
@@ -404,7 +273,7 @@ class CallSessionStateMachine:
         return response, self.state, None
 
     def _execute_plan_turn(self, user_text: str):
-        acc = self.account or bss_service.get_account_by_phone("+15550192834")
+        acc = self.account or bss_service.get_account_by_phone(config.DEFAULT_DEMO_ANI)
         response, is_resolved, should_escalate, updated_ctx = PlanFlow.handle_turn(
             user_text, acc, self.flow_context, language=self.language
         )
@@ -419,7 +288,7 @@ class CallSessionStateMachine:
         return response, self.state, None
 
     def _execute_callback_turn(self, user_text: str):
-        acc = self.account or bss_service.get_account_by_phone("+15550192834")
+        acc = self.account or bss_service.get_account_by_phone(config.DEFAULT_DEMO_ANI)
         response, is_resolved, should_escalate, updated_ctx = CallbackFlow.handle_turn(
             user_text, acc, self.flow_context, language=self.language
         )
