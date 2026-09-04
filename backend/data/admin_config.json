@@ -2,7 +2,7 @@
   "HOST": "0.0.0.0",
   "PORT": 8000,
   "DEBUG": true,
-  "DEFAULT_VOICE": "en-US-JennyNeural",
+  "DEFAULT_VOICE": "es-US-PalomaNeural",
   "BACKUP_VOICE": "en-US-GuyNeural",
   "SPANISH_VOICE": "es-US-PalomaNeural",
   "HINDI_VOICE": "hi-IN-SwaraNeural",
