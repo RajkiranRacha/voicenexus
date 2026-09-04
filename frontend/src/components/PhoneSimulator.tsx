@@ -59,14 +59,17 @@ export const PhoneSimulator: React.FC = () => {
   const activeAni = customAni.trim() || selectedAni;
 
   const call = useCallWebSocket(agentAudioRef);
-  const speech = useSpeechRecognition(call.callLanguage, setInputText, setInputText);
+  const sendUtterance = (text: string) => call.sendUtterance(text, setInputText);
+  // Final speech result is sent immediately instead of waiting in the input
+  // box for a manual Send click, so a voice turn behaves like an actual
+  // spoken conversation: speak, it understands, it responds.
+  const speech = useSpeechRecognition(call.callLanguage, setInputText, sendUtterance);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [call.turns]);
 
   const startCall = () => call.startCall(activeAni, autoPlayAudio);
-  const sendUtterance = (text: string) => call.sendUtterance(text, setInputText);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
@@ -373,7 +376,7 @@ export const PhoneSimulator: React.FC = () => {
           {/* Custom Caller Speech Input with Microphone */}
           <div className="mt-3 pt-3 border-t border-slate-800 flex flex-col space-y-1.5">
             {speech.isListening && (
-              <div className="text-[11px] text-indigo-300">Listening — review the text below before sending, in case it mis-heard you.</div>
+              <div className="text-[11px] text-indigo-300">Listening — I'll respond as soon as you finish speaking.</div>
             )}
             {speech.error && (
               <div className="text-[11px] text-rose-400">{speech.error}</div>
