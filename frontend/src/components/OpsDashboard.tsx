@@ -1,35 +1,18 @@
-﻿import React, { useState, useEffect } from 'react';
-import { 
-  BarChart3, TrendingUp, Clock, PhoneForwarded, 
-  ShieldCheck, RefreshCw, Eye, X
+import React, { useState } from 'react';
+import {
+  BarChart3, TrendingUp, Clock, PhoneForwarded,
+  ShieldCheck, RefreshCw, Eye, X, PhoneOff, Star, Download
 } from 'lucide-react';
-import type { TelemetrySummary, CallRecord } from '../types';
+import type { CallRecord } from '../types';
+import { useTelemetryPolling } from '../hooks/useTelemetryPolling';
+import { DistributionBarList } from './shared/DistributionBarList';
+import { TranscriptList } from './shared/TranscriptList';
 
 export const OpsDashboard: React.FC = () => {
-  const [summary, setSummary] = useState<TelemetrySummary | null>(null);
-  const [cdrs, setCdrs] = useState<CallRecord[]>([]);
+  const { summary, cdrs, loading, fetchMetrics } = useTelemetryPolling(5000);
   const [selectedCdr, setSelectedCdr] = useState<CallRecord | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchMetrics = () => {
-    setLoading(true);
-    Promise.all([
-      fetch('/api/telemetry/summary').then(r => r.json()),
-      fetch('/api/telemetry/cdrs').then(r => r.json())
-    ])
-      .then(([sumData, cdrData]) => {
-        setSummary(sumData);
-        setCdrs(cdrData);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const latencyOnTarget = summary ? summary.median_latency_ms <= (summary.latency_slo_target_ms || 1000) : true;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -44,19 +27,28 @@ export const OpsDashboard: React.FC = () => {
             Real-time containment, handle time, and intent distribution metrics for contact center operations.
           </p>
         </div>
-        <button
-          onClick={fetchMetrics}
-          disabled={loading}
-          className="py-1.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Feed</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <a
+            href="/api/telemetry/export?format=csv"
+            className="py-1.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </a>
+          <button
+            onClick={fetchMetrics}
+            disabled={loading}
+            className="py-1.5 px-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Feed</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards Grid */}
       {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Containment Rate */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
@@ -82,6 +74,34 @@ export const OpsDashboard: React.FC = () => {
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
               {summary.escalated_calls} calls sent to agent queue
+            </div>
+          </div>
+
+          {/* Abandonment Rate */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+              <span>Abandonment Rate</span>
+              <PhoneOff className="w-4 h-4 text-rose-400" />
+            </div>
+            <div className="text-2xl font-black text-rose-400">
+              {summary.abandonment_rate_pct}%
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              {summary.abandoned_calls} calls dropped before resolution
+            </div>
+          </div>
+
+          {/* Care CSAT */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+              <span>Avg Care CSAT</span>
+              <Star className="w-4 h-4 text-amber-300" />
+            </div>
+            <div className="text-2xl font-black text-amber-300">
+              {summary.avg_csat != null ? summary.avg_csat.toFixed(1) : '—'}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1">
+              {summary.csat_response_count} post-call ratings collected
             </div>
           </div>
 
@@ -113,17 +133,17 @@ export const OpsDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Median Response Latency */}
+          {/* Median Response Latency (SLO-aware) */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
               <span>Median Turn Latency</span>
-              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+              <ShieldCheck className={`w-4 h-4 ${latencyOnTarget ? 'text-cyan-400' : 'text-rose-400'}`} />
             </div>
-            <div className="text-2xl font-black text-cyan-300">
+            <div className={`text-2xl font-black ${latencyOnTarget ? 'text-cyan-300' : 'text-rose-400'}`}>
               {summary.median_latency_ms} ms
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              SLO: ≤1000ms response to caller
+            <div className={`text-[11px] mt-1 ${latencyOnTarget ? 'text-slate-500' : 'text-rose-400 font-semibold'}`}>
+              SLO: ≤{summary.latency_slo_target_ms || 1000}ms · {summary.latency_slo_breach_pct}% of calls breached
             </div>
           </div>
         </div>
@@ -137,25 +157,13 @@ export const OpsDashboard: React.FC = () => {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">
               Care Intent Volume Distribution
             </h3>
-            <div className="space-y-3">
-              {Object.entries(summary.intent_distribution).map(([intent, count]) => {
-                const pct = summary.total_calls > 0 ? (count / summary.total_calls) * 100 : 0;
-                return (
-                  <div key={intent} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-slate-200">{intent}</span>
-                      <span className="text-slate-400">{count} calls ({pct.toFixed(0)}%)</span>
-                    </div>
-                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-850">
-                      <div 
-                        className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${Math.max(5, pct)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <DistributionBarList
+              items={Object.entries(summary.intent_distribution)}
+              total={summary.total_calls}
+              unitLabel="calls"
+              barColorClass="bg-indigo-500"
+              labelColorClass="text-slate-200"
+            />
           </div>
 
           {/* Escalation Drivers */}
@@ -163,29 +171,14 @@ export const OpsDashboard: React.FC = () => {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-4">
               Agent Escalation Root Causes
             </h3>
-            <div className="space-y-3">
-              {Object.keys(summary.escalation_reasons).length === 0 ? (
-                <div className="text-slate-500 text-xs py-6 text-center">No escalations recorded.</div>
-              ) : (
-                Object.entries(summary.escalation_reasons).map(([reason, count]) => {
-                  const pct = summary.escalated_calls > 0 ? (count / summary.escalated_calls) * 100 : 0;
-                  return (
-                    <div key={reason} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-medium text-amber-300">{reason}</span>
-                        <span className="text-slate-400">{count} transfers ({pct.toFixed(0)}%)</span>
-                      </div>
-                      <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-850">
-                        <div 
-                          className="bg-amber-500 h-full rounded-full transition-all duration-500" 
-                          style={{ width: `${Math.max(5, pct)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+            <DistributionBarList
+              items={Object.entries(summary.escalation_reasons)}
+              total={summary.escalated_calls}
+              unitLabel="transfers"
+              barColorClass="bg-amber-500"
+              labelColorClass="text-amber-300"
+              emptyMessage="No escalations recorded."
+            />
           </div>
         </div>
       )}
@@ -225,9 +218,11 @@ export const OpsDashboard: React.FC = () => {
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                       cdr.final_state === 'RESOLVED_CONTAINED'
                         ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                        : cdr.final_state === 'ABANDONED'
+                        ? 'bg-rose-950 text-rose-400 border border-rose-800'
                         : 'bg-amber-950 text-amber-400 border border-amber-800'
                     }`}>
-                      {cdr.final_state === 'RESOLVED_CONTAINED' ? 'Contained' : 'Escalated'}
+                      {cdr.final_state === 'RESOLVED_CONTAINED' ? 'Contained' : cdr.final_state === 'ABANDONED' ? 'Abandoned' : 'Escalated'}
                     </span>
                   </td>
                   <td className="py-3 text-slate-400">{cdr.duration_sec}s</td>
@@ -293,16 +288,7 @@ export const OpsDashboard: React.FC = () => {
                 {selectedCdr.transcript.length === 0 ? (
                   <div className="text-slate-500 text-center py-4">No dialogue turns recorded.</div>
                 ) : (
-                  selectedCdr.transcript.map((t, i) => (
-                    <div key={i} className="flex space-x-2">
-                      <span className={`font-semibold text-[11px] min-w-[70px] ${
-                        t.speaker === 'caller' ? 'text-indigo-400' : 'text-slate-400'
-                      }`}>
-                        {t.speaker === 'caller' ? 'Caller:' : 'VoiceNexus:'}
-                      </span>
-                      <span className="text-slate-200 flex-1">{t.text}</span>
-                    </div>
-                  ))
+                  <TranscriptList turns={selectedCdr.transcript} variant="label-row" />
                 )}
               </div>
             </div>

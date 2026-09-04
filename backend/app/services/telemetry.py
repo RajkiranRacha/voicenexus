@@ -1,6 +1,7 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime
 from app.models.schemas import TelemetrySummary, CallState, IntentEnum
+from app.config import config
 
 class TelemetryService:
     """
@@ -78,20 +79,38 @@ class TelemetryService:
             "avg_latency_ms": avg_latency_ms,
             "turns_count": turns_count,
             "transcript": transcript or [],
+            "csat_rating": None,
             "timestamp": datetime.now().isoformat()
         }
         self._records.insert(0, record)  # Most recent first
 
+    def record_csat(self, session_id: str, rating: int) -> bool:
+        """
+        Attaches a post-call CSAT rating (1-5) to the matching call detail
+        record (PRD business-impact category "Care CSAT"). Returns False if no
+        matching record is found.
+        """
+        for r in self._records:
+            if r["session_id"] == session_id:
+                r["csat_rating"] = rating
+                return True
+        return False
+
     def get_summary(self) -> TelemetrySummary:
         total = len(self._records)
         if total == 0:
-            return TelemetrySummary(active_calls=len(self._active_sessions))
+            return TelemetrySummary(
+                active_calls=len(self._active_sessions),
+                latency_slo_target_ms=float(config.TARGET_LATENCY_MS)
+            )
 
         contained = [r for r in self._records if r["final_state"] == CallState.RESOLVED_CONTAINED.value]
         escalated = [r for r in self._records if r["final_state"] == CallState.ESCALATING_TO_AGENT.value]
+        abandoned = [r for r in self._records if r["final_state"] == CallState.ABANDONED.value]
 
         containment_rate = (len(contained) / total) * 100.0 if total > 0 else 0.0
         transfer_rate = (len(escalated) / total) * 100.0 if total > 0 else 0.0
+        abandonment_rate = (len(abandoned) / total) * 100.0 if total > 0 else 0.0
 
         aht_auto = (
             sum(r["duration_sec"] for r in contained) / len(contained)
@@ -101,9 +120,17 @@ class TelemetryService:
             sum(r["duration_sec"] for r in escalated) / len(escalated)
             if escalated else 0.0
         )
-        
+
         latencies = [r["avg_latency_ms"] for r in self._records if r.get("avg_latency_ms")]
         median_lat = sorted(latencies)[len(latencies)//2] if latencies else 500.0
+
+        # NFR: "latency SLOs with continuous monitoring" -- share of calls
+        # whose average turn latency exceeded the configured target.
+        breaches = [lat for lat in latencies if lat > config.TARGET_LATENCY_MS]
+        breach_rate = (len(breaches) / len(latencies)) * 100.0 if latencies else 0.0
+
+        csat_ratings = [r["csat_rating"] for r in self._records if r.get("csat_rating")]
+        avg_csat = round(sum(csat_ratings) / len(csat_ratings), 2) if csat_ratings else None
 
         intent_dist: Dict[str, int] = {}
         for r in self._records:
@@ -120,11 +147,17 @@ class TelemetryService:
             active_calls=len(self._active_sessions),
             contained_calls=len(contained),
             escalated_calls=len(escalated),
+            abandoned_calls=len(abandoned),
             containment_rate_pct=round(containment_rate, 1),
             transfer_rate_pct=round(transfer_rate, 1),
+            abandonment_rate_pct=round(abandonment_rate, 1),
             avg_handle_time_automated_sec=round(aht_auto, 1),
             avg_handle_time_escalated_sec=round(aht_esc, 1),
             median_latency_ms=round(median_lat, 1),
+            latency_slo_target_ms=float(config.TARGET_LATENCY_MS),
+            latency_slo_breach_pct=round(breach_rate, 1),
+            avg_csat=avg_csat,
+            csat_response_count=len(csat_ratings),
             intent_distribution=intent_dist,
             escalation_reasons=esc_reasons
         )

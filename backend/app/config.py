@@ -60,6 +60,12 @@ class VoiceNexusConfig(BaseModel):
         "care specialists right now. I've sent them your verified details so you won't have to repeat yourself."
     )
 
+    # Demo fallback subscriber ANIs (used when a call session has no verified
+    # account yet, e.g. a caller who typed free-form text instead of going
+    # through ANI/KBA/OTP verification in the simulator).
+    DEFAULT_DEMO_ANI: str = "+15550192834"
+    DEFAULT_OUTAGE_DEMO_ANI: str = "+15550148821"
+
     # Escalation & Safety Thresholds
     MAX_UNRECOGNIZED_TURNS: int = 2
     CONFIRMATION_REQUIRED_FOR_ACTIONS: bool = True

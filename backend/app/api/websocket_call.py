@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.engine.orchestrator import DialogueOrchestrator
 from app.services.agent_hub import agent_hub
+from app.config import config
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ async def call_websocket_endpoint(websocket: WebSocket):
             msg_type = data.get("type")
 
             if msg_type == "START_CALL":
-                ani = data.get("ani", "+15550192834")
+                ani = data.get("ani", config.DEFAULT_DEMO_ANI)
                 orchestrator = DialogueOrchestrator(session_id, ani)
                 agent_hub.register_caller(session_id, websocket)
                 welcome_resp = await orchestrator.start_session()
@@ -27,7 +28,7 @@ async def call_websocket_endpoint(websocket: WebSocket):
 
             elif msg_type == "CALLER_UTTERANCE":
                 if not orchestrator:
-                    ani = data.get("ani", "+15550192834")
+                    ani = data.get("ani", config.DEFAULT_DEMO_ANI)
                     orchestrator = DialogueOrchestrator(session_id, ani)
                     agent_hub.register_caller(session_id, websocket)
                 
@@ -53,8 +54,11 @@ async def call_websocket_endpoint(websocket: WebSocket):
                     await websocket.send_text(json.dumps({"type": "BARGE_IN_ACK"}))
 
             elif msg_type == "END_CALL":
+                # A call ending without ever reaching a contained resolution or an
+                # agent escalation is an abandoned call (PRD business-impact
+                # metric "Abandonment rate"), not a silent success.
                 if orchestrator and orchestrator.fsm.state.value not in ["RESOLVED_CONTAINED", "ESCALATING_TO_AGENT"]:
-                    orchestrator._finalize_telemetry(is_escalated=False)
+                    orchestrator._finalize_telemetry(is_escalated=False, is_abandoned=True)
                 await agent_hub.relay_caller_to_agent(session_id, {"type": "CALL_ENDED", "session_id": session_id})
                 agent_hub.unregister_caller(session_id)
                 await websocket.send_text(json.dumps({"type": "CALL_ENDED", "session_id": session_id}))
@@ -62,7 +66,7 @@ async def call_websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         if orchestrator and orchestrator.fsm.state.value not in ["RESOLVED_CONTAINED", "ESCALATING_TO_AGENT"]:
-            orchestrator._finalize_telemetry(is_escalated=False)
+            orchestrator._finalize_telemetry(is_escalated=False, is_abandoned=True)
         await agent_hub.relay_caller_to_agent(session_id, {"type": "CALL_ENDED", "session_id": session_id})
         agent_hub.unregister_caller(session_id)
     finally:

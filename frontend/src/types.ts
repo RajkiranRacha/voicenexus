@@ -106,11 +106,17 @@ export interface TelemetrySummary {
   active_calls: number;
   contained_calls: number;
   escalated_calls: number;
+  abandoned_calls: number;
   containment_rate_pct: number;
   transfer_rate_pct: number;
+  abandonment_rate_pct: number;
   avg_handle_time_automated_sec: number;
   avg_handle_time_escalated_sec: number;
   median_latency_ms: number;
+  latency_slo_target_ms: number;
+  latency_slo_breach_pct: number;
+  avg_csat: number | null;
+  csat_response_count: number;
   intent_distribution: Record<string, number>;
   escalation_reasons: Record<string, number>;
 }
@@ -126,6 +132,7 @@ export interface CallRecord {
   escalation_reason?: string;
   avg_latency_ms: number;
   turns_count: number;
+  csat_rating?: number | null;
   transcript: Array<{ speaker: string; text: string }>;
   timestamp: string;
 }

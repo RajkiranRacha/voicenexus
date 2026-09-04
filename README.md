@@ -27,8 +27,9 @@ VoiceNexus is an AI IVR platform engineered for telecom, broadband, and cable se
    - Real-time CTI Screen-Pop feed to the Live Agent Desktop over WebSockets.
    - Live transcript overlay to ensure zero-repetition handoff.
 5. **Care-Ops Telemetry & Analytics Dashboard (`VN-6`):**
-   - Real-time computation of Containment Rate (%), Live Agent Transfer Rate (%), AHT Automated vs Escalated (sec), Median Response Latency (ms), Intent Distribution, and Escalation Drivers.
-   - Interactive Call Detail Records (CDR) inspector.
+   - Real-time computation of Containment Rate (%), Live Agent Transfer Rate (%), Abandonment Rate (%), AHT Automated vs Escalated (sec), Median Response Latency with SLO-breach tracking, Intent Distribution, and Escalation Drivers.
+   - Post-call CSAT capture and rolling average (PRD business-impact category "Care CSAT").
+   - Interactive Call Detail Records (CDR) inspector and one-click CSV export for downstream reporting.
 6. **Degraded Mode & DTMF Touch-Tone Fallback (`VN-9`):**
    - 12-key DTMF dialpad with instant `0` key operator escalation.
 7. **Brand Voice & Tenant Customization (`VN-7`, `VN-9`):**
@@ -44,8 +45,9 @@ voicenexus/
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── routes/
+│   │   │   │   ├── admin.py         # Tenant voice/prompt config API (VN-7, VN-9)
 │   │   │   │   ├── agent.py         # Agent Desktop API & WebSockets (VN-5, VN-10)
-│   │   │   │   └── telemetry.py     # Care-Ops metrics & CDR APIs (VN-6)
+│   │   │   │   └── telemetry.py     # Care-Ops metrics, CSAT & CDR export APIs (VN-6)
 │   │   │   └── websocket_call.py    # Real-time Telephony / WebPhone Gateway
 │   │   ├── engine/
 │   │   │   ├── flows/
@@ -54,28 +56,51 @@ voicenexus/
 │   │   │   │   ├── plan_flow.py          # Plan inquiry & speed upgrades
 │   │   │   │   └── callback_flow.py      # Async callback scheduler
 │   │   │   ├── intent_classifier.py      # NLU intent pattern recognizer
+│   │   │   ├── nlu_utils.py              # Shared affirmative/negative detection
 │   │   │   ├── orchestrator.py           # Dialogue turn & latency coordinator
 │   │   │   └── state_machine.py          # Deterministic Care State Machine
+│   │   ├── i18n/
+│   │   │   ├── strings.py           # Centralized en/es/hi message templates
+│   │   │   └── __init__.py          # t(key, lang, **kwargs) lookup helper
 │   │   ├── models/
 │   │   │   └── schemas.py           # Pydantic schemas & EscalationPayload
 │   │   ├── services/
 │   │   │   ├── agent_hub.py         # Agent Desktop broadcast broker
 │   │   │   ├── bss_oss.py           # Mock Telco system of record & idempotency
 │   │   │   ├── identity.py          # ANI & SMS OTP verification
-│   │   │   ├── telemetry.py         # Metrics calculation & CDR logger
+│   │   │   ├── telemetry.py         # Metrics calculation, CSAT & CDR logger
 │   │   │   └── tts.py               # Neural streaming TTS engine
 │   │   ├── config.py                # Tenant settings & latency targets
 │   │   └── main.py                  # FastAPI application entrypoint
 │   ├── tests/
-│   │   └── test_flows.py            # Complete automated test suite
+│   │   ├── test_flows.py                  # Core dialogue/subflow test suite
+│   │   └── test_telemetry_enhancements.py # Abandonment, CSAT & export tests
 │   └── requirements.txt
 └── frontend/
     ├── src/
+    │   ├── api/
+    │   │   └── client.ts            # Shared fetch/WebSocket-URL wrappers
     │   ├── components/
+    │   │   ├── shared/
+    │   │   │   ├── TranscriptList.tsx    # Shared dialogue-turn renderers
+    │   │   │   ├── MicStatusBadge.tsx    # Shared microphone status pill
+    │   │   │   └── DistributionBarList.tsx # Shared percentage-bar breakdown
     │   │   ├── PhoneSimulator.tsx   # Interactive WebPhone & Audio visualizer
     │   │   ├── AgentDesktop.tsx     # CTI Screen-Pop & live transcript overlay
     │   │   ├── OpsDashboard.tsx     # Care-Ops KPI metrics & CDR inspector
     │   │   └── AdminConfig.tsx      # Voice persona & tenant prompt editor
+    │   ├── data/
+    │   │   └── presets.ts           # Demo caller/utterance scenario data
+    │   ├── hooks/
+    │   │   ├── useCallWebSocket.ts     # Caller phone WS + WebRTC session
+    │   │   ├── useAgentWebSocket.ts    # Agent CTI bridge WS + WebRTC session
+    │   │   ├── useWebRTCPeer.ts        # Shared RTCPeerConnection plumbing
+    │   │   ├── useTtsPlayback.ts       # Base64 TTS audio playback
+    │   │   ├── useSpeechRecognition.ts # Web Speech API wrapper
+    │   │   ├── useTelemetryPolling.ts  # Care-Ops metrics polling
+    │   │   └── useAdminConfig.ts       # Tenant config load/save
+    │   ├── lib/
+    │   │   └── nextBestAction.ts    # Agent Next-Best-Action lookup
     │   ├── types.ts                 # TypeScript data contracts
     │   └── App.tsx                  # Unified 4-mode application shell
     └── package.json
