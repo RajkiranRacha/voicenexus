@@ -21,9 +21,13 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
   const [audioDegraded, setAudioDegraded] = useState<boolean>(false);
   const [connectedAgent, setConnectedAgent] = useState<{ id: string; name: string } | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sttPartial, setSttPartial] = useState<{ text: string; confidence: number } | null>(null);
+  const [sttFinal, setSttFinal] = useState<{ text: string; confidence: number } | null>(null);
+  const [sttError, setSttError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const callStateRef = useRef<CallUiState>(callState);
+  const sttLatencyAccumRef = useRef<number>(0);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
 
   // Sync the pre-call language badge/speech-recognition default from the
@@ -132,6 +136,14 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
             utter.lang = callLanguage;
             window.speechSynthesis.speak(utter);
           }
+        } else if (data.type === 'STT_PARTIAL_RESULT') {
+          sttLatencyAccumRef.current += data.stt_ms ?? 0;
+          setSttPartial({ text: data.text, confidence: data.confidence });
+        } else if (data.type === 'STT_RESULT') {
+          sttLatencyAccumRef.current += data.stt_ms ?? 0;
+          setSttFinal({ text: data.text, confidence: data.confidence });
+        } else if (data.type === 'STT_ERROR') {
+          setSttError(data.message);
         } else if (data.type === 'AGENT_DISCONNECT' || data.type === 'CALL_ENDED') {
           setCallState('ENDED');
           setConnectedAgent(null);
@@ -178,12 +190,24 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     setTurns(prev => [...prev, callerTurn]);
     setInputText?.('');
 
+    // Real accumulated server-side transcription latency from any mic
+    // recording that fed this utterance; 0 for manually-typed text, which is
+    // more honest than the flat fake constant this used to send.
+    const sttLatencyMs = sttLatencyAccumRef.current;
+    sttLatencyAccumRef.current = 0;
+
     if (connectedAgent) {
       wsRef.current.send(JSON.stringify({ type: 'CALLER_LIVE_SPEECH', text }));
     } else {
-      wsRef.current.send(JSON.stringify({ type: 'CALLER_UTTERANCE', text, stt_latency_ms: 120.0 }));
+      wsRef.current.send(JSON.stringify({ type: 'CALLER_UTTERANCE', text, stt_latency_ms: sttLatencyMs }));
     }
   }, [connectedAgent, handleBargeIn]);
+
+  const sendAudioChunk = useCallback((base64: string, mimeType: string, isFinal: boolean) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'CALLER_AUDIO_CHUNK', audio_base64: base64, mime_type: mimeType, is_final: isFinal }));
+    }
+  }, []);
 
   const sendDtmf = useCallback((digit: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -204,6 +228,7 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     isCallerMicActive: webrtc.isMicActive,
     isCallerMuted: webrtc.isMuted,
     toggleCallerMute: webrtc.toggleMute,
+    sttPartial, sttFinal, sttError, sendAudioChunk,
     startCall, endCall, sendUtterance, sendDtmf, handleBargeIn,
   };
 }
