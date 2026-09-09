@@ -46,6 +46,19 @@ export const OpsDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Initial Load Skeleton */}
+      {!summary && loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg animate-pulse">
+              <div className="h-3 w-24 bg-slate-800 rounded mb-3" />
+              <div className="h-7 w-16 bg-slate-800 rounded mb-2" />
+              <div className="h-2.5 w-32 bg-slate-800/70 rounded" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* KPI Cards Grid */}
       {summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

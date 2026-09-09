@@ -21,6 +21,7 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
   const [audioDegraded, setAudioDegraded] = useState<boolean>(false);
   const [connectedAgent, setConnectedAgent] = useState<{ id: string; name: string } | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [awaitingResponse, setAwaitingResponse] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const callStateRef = useRef<CallUiState>(callState);
@@ -66,6 +67,7 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     setLatestLatency(null);
     setConnectedAgent(null);
     setSessionId(null);
+    setAwaitingResponse(false);
 
     const ws = new WebSocket(wsUrl('/ws/call'));
 
@@ -78,6 +80,7 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'SESSION_STARTED') {
+          setAwaitingResponse(false);
           if (data.session_id) setSessionId(data.session_id);
           setCallerProfile(data.caller_account || null);
           if (data.language) setCallLanguage(data.language);
@@ -90,6 +93,7 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
             playAudioBase64(data.audio_base64);
           }
         } else if (data.type === 'TURN_RESPONSE') {
+          setAwaitingResponse(false);
           if (data.turn) {
             setTurns(prev => [...prev, data.turn]);
             if (data.turn.latency) setLatestLatency(data.turn.latency);
@@ -133,16 +137,19 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
             window.speechSynthesis.speak(utter);
           }
         } else if (data.type === 'AGENT_DISCONNECT' || data.type === 'CALL_ENDED') {
+          setAwaitingResponse(false);
           setCallState('ENDED');
           setConnectedAgent(null);
           webrtc.close();
         }
       } catch (err) {
+        setAwaitingResponse(false);
         console.error("Caller WS message error:", err);
       }
     };
 
     ws.onclose = () => {
+      setAwaitingResponse(false);
       if (callStateRef.current !== 'ENDED' && callStateRef.current !== 'ESCALATED') {
         setCallState('ENDED');
       }
@@ -166,6 +173,9 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
 
   const sendUtterance = useCallback((text: string, setInputText?: (v: string) => void) => {
     if (!text.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    // Guard against duplicate sends (e.g. a preset button re-triggered by a
+    // lingering Enter keypress) while a turn response is still in flight.
+    if (!connectedAgent && awaitingResponse) return;
 
     handleBargeIn();
 
@@ -181,12 +191,14 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     if (connectedAgent) {
       wsRef.current.send(JSON.stringify({ type: 'CALLER_LIVE_SPEECH', text }));
     } else {
+      setAwaitingResponse(true);
       wsRef.current.send(JSON.stringify({ type: 'CALLER_UTTERANCE', text, stt_latency_ms: 120.0 }));
     }
-  }, [connectedAgent, handleBargeIn]);
+  }, [connectedAgent, awaitingResponse, handleBargeIn]);
 
   const sendDtmf = useCallback((digit: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!connectedAgent && awaitingResponse) return;
     handleBargeIn();
     const callerTurn: DialogueTurn = {
       turn_id: Date.now(),
@@ -195,11 +207,13 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
       timestamp: new Date().toISOString()
     };
     setTurns(prev => [...prev, callerTurn]);
+    if (!connectedAgent) setAwaitingResponse(true);
     wsRef.current.send(JSON.stringify({ type: 'DTMF_KEY', digit }));
-  }, [handleBargeIn]);
+  }, [connectedAgent, awaitingResponse, handleBargeIn]);
 
   return {
     callState, turns, latestLatency, callerProfile, callLanguage, audioDegraded, connectedAgent, sessionId,
+    awaitingResponse,
     isPlayingAudio,
     isCallerMicActive: webrtc.isMicActive,
     isCallerMuted: webrtc.isMuted,

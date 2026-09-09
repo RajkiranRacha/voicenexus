@@ -483,9 +483,9 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
     },
     "callback.declined_offer_wait": {
-        "es": "Entendido. ¿Prefiere esperar en línea para hablar con un agente ahora mismo?",
-        "hi": "समझ गया। क्या आप अभी लाइन पर रुककर किसी एजेंट से बात करना पसंद करेंगे?",
-        "en": "No problem. Would you rather wait on the line to speak with an agent right now?",
+        "es": "Entendido, no programaremos una devolución de llamada. Le estoy conectando ahora mismo con un agente en línea.",
+        "hi": "समझ गया, हम कॉलबैक शेड्यूल नहीं करेंगे। मैं अभी आपको लाइन पर एक एजेंट से जोड़ रहा हूँ।",
+        "en": "Understood, no callback scheduled. I'm connecting you with an agent on the line right now.",
     },
     "callback.fallback": {
         "es": "Puedo programar una devolución de llamada para usted. ¿Qué horario le conviene?",

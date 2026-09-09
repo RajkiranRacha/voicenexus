@@ -2,7 +2,7 @@
   "HOST": "0.0.0.0",
   "PORT": 8000,
   "DEBUG": true,
-  "DEFAULT_VOICE": "es-US-PalomaNeural",
+  "DEFAULT_VOICE": "en-US-JennyNeural",
   "BACKUP_VOICE": "en-US-GuyNeural",
   "SPANISH_VOICE": "es-US-PalomaNeural",
   "HINDI_VOICE": "hi-IN-SwaraNeural",
@@ -35,6 +35,6 @@
   "GEMINI_API_KEY": "",
   "OPENAI_API_KEY": "",
   "STT_ENABLED": true,
-  "STT_MODEL_SIZE": "base",
-  "STT_DEBUG_LOGGING": true
+  "STT_MODEL_SIZE": "small",
+  "STT_DEBUG_LOGGING": false
 }
