@@ -20,6 +20,7 @@ class AgentHub:
 
     def unregister_caller(self, session_id: str):
         self._caller_websockets.pop(session_id, None)
+        self._pending_escalations.pop(session_id, None)
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()

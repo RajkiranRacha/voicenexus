@@ -497,4 +497,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "hi": "अगले 2 घंटों के भीतर",
         "en": "within the next 2 hours",
     },
+    "escalation.prompt": {
+        "es": (
+            "Quiero asegurarme de que esto se resuelva correctamente. Le estoy transfiriendo a uno de nuestros "
+            "especialistas de atención en este momento. Le he enviado sus datos verificados para que no tenga que repetirlos."
+        ),
+        "hi": (
+            "मैं यह सुनिश्चित करना चाहता हूँ कि यह सही ढंग से हल हो। मैं अभी आपको हमारे एक "
+            "सहायता विशेषज्ञ से जोड़ रहा हूँ। मैंने उन्हें आपका सत्यापित विवरण भेज दिया है ताकि आपको दोहराना न पड़े।"
+        ),
+        "en": (
+            "I want to make sure this gets resolved correctly. I am transferring you to one of our "
+            "care specialists right now. I've sent them your verified details so you won't have to repeat yourself."
+        ),
+    },
 }

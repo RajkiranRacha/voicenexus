@@ -94,6 +94,8 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
           }
         } else if (data.type === 'TURN_RESPONSE') {
           setAwaitingResponse(false);
+          if (data.language) setCallLanguage(data.language);
+          if (data.caller_account) setCallerProfile(data.caller_account);
           if (data.turn) {
             setTurns(prev => [...prev, data.turn]);
             if (data.turn.latency) setLatestLatency(data.turn.latency);

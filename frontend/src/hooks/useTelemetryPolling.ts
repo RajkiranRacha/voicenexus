@@ -8,8 +8,8 @@ export function useTelemetryPolling(intervalMs: number = 5000) {
   const [cdrs, setCdrs] = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchMetrics = useCallback(() => {
-    setLoading(true);
+  const fetchMetrics = useCallback((showLoading: boolean = false) => {
+    if (showLoading) setLoading(true);
     Promise.all([
       apiGet<TelemetrySummary>('/api/telemetry/summary'),
       apiGet<CallRecord[]>('/api/telemetry/cdrs'),
@@ -23,8 +23,18 @@ export function useTelemetryPolling(intervalMs: number = 5000) {
   }, []);
 
   useEffect(() => {
-    fetchMetrics();
-    const interval = setInterval(fetchMetrics, intervalMs);
+    Promise.all([
+      apiGet<TelemetrySummary>('/api/telemetry/summary'),
+      apiGet<CallRecord[]>('/api/telemetry/cdrs'),
+    ])
+      .then(([sumData, cdrData]) => {
+        setSummary(sumData);
+        setCdrs(cdrData);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+
+    const interval = setInterval(() => fetchMetrics(false), intervalMs);
     return () => clearInterval(interval);
   }, [fetchMetrics, intervalMs]);
 

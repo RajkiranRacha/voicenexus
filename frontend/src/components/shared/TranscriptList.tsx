@@ -26,9 +26,9 @@ export const TranscriptList: React.FC<TranscriptListProps> = ({ turns, variant }
         {turns.map((t, i) => (
           <div key={i} className="flex space-x-2">
             <span className={`font-semibold text-[11px] min-w-[70px] ${
-              t.speaker === 'caller' ? 'text-indigo-400' : 'text-slate-400'
+              t.speaker === 'caller' ? 'text-indigo-400' : t.speaker === 'system' ? 'text-amber-400' : 'text-slate-400'
             }`}>
-              {t.speaker === 'caller' ? 'Caller:' : 'VoiceNexus:'}
+              {t.speaker === 'caller' ? 'Caller:' : t.speaker === 'system' ? 'System:' : 'VoiceNexus:'}
             </span>
             <span className="text-slate-200 flex-1">{t.text}</span>
           </div>
@@ -48,7 +48,7 @@ export const TranscriptList: React.FC<TranscriptListProps> = ({ turns, variant }
                 : 'bg-slate-800 text-slate-200 border border-slate-700'
             }`}>
               <div className="text-[10px] opacity-75 font-semibold mb-0.5">
-                {t.speaker === 'caller' ? 'Caller' : 'VoiceNexus AI'}
+                {t.speaker === 'caller' ? 'Caller' : t.speaker === 'system' ? 'System' : 'VoiceNexus AI'}
               </div>
               <div>{t.text}</div>
             </div>
@@ -73,7 +73,7 @@ export const TranscriptList: React.FC<TranscriptListProps> = ({ turns, variant }
           >
             <div className="flex items-center justify-between mb-1 opacity-75 text-[10px]">
               <span className="font-semibold">
-                {turn.speaker === 'caller' ? 'Caller (Customer)' : 'VoiceNexus AI IVR'}
+                {turn.speaker === 'caller' ? 'Caller (Customer)' : turn.speaker === 'system' ? 'System Notice' : 'VoiceNexus AI IVR'}
               </span>
               {turn.latency && <span>{turn.latency.total_turn_ms} ms</span>}
             </div>

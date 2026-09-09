@@ -162,7 +162,8 @@ class CallSessionStateMachine:
             self.consecutive_unrecognized = 0
             if any(phrase in lowered for phrase in [
                 "good", "fine", "nothing", "that's all", "thats all", "all set",
-                "no need", "bien", "nada más", "nada mas", "kuch nahi", "sab theek", "sab thik"
+                "no need", "bien", "nada más", "nada mas", "kuch nahi", "sab theek", "sab thik",
+                "goodbye", "good bye", "bye", "adios", "adiós", "hasta luego", "alvida", "अलविदा", "see you", "have a"
             ]):
                 return t("gratitude.closing", self.language), CallState.RESOLVED_CONTAINED, None
             return t("gratitude.continue", self.language), CallState.INTENT_ROUTING, None
@@ -355,4 +356,9 @@ class CallSessionStateMachine:
             transcript_snippet=snippet
         )
 
-        return config.ESCALATION_PROMPT, self.state, self.escalation_payload
+        prompt = (
+            t("escalation.prompt", self.language)
+            if self.language != "en-US"
+            else config.ESCALATION_PROMPT
+        )
+        return prompt, self.state, self.escalation_payload

@@ -45,6 +45,7 @@ class IntentClassifier:
         IntentEnum.GRATITUDE: [
             r"(?<!\S)(thank you|thanks|thank you so much|thanks a lot|many thanks|appreciate it|i appreciate it|much appreciated)(?!\S)",
             r"(?<!\S)(i am good|i'm good|im good|all good|doing good|we are good|we're good|nothing else|that's all|thats all|that is all)(?!\S)",
+            r"(?<!\S)(goodbye|good bye|bye|bye bye|have a good day|have a nice day|see you|adiós|adios|hasta luego|chao|alvida|अलविदा)(?!\S)",
             r"(?<!\S)(gracias|muchas gracias|mil gracias|te agradezco|estoy bien gracias|todo bien gracias)(?!\S)",
             r"(?<!\S)(dhanyavaad|dhanyawad|shukriya|bahut dhanyavaad)(?!\S)"
         ],
@@ -54,10 +55,10 @@ class IntentClassifier:
             r"(?<!\S)(theek hai|thik hai|accha|achha|samajh gaya)(?!\S)"
         ],
         IntentEnum.CONFIRMATION_YES: [
-            r"(?<!\S)(yes|yeah|yep|yup|sure|correct|confirm|go ahead|sounds good|that's right|i agree|affirmative|absolutely|sí|si|correcto|de acuerdo|confirmo|adelante|haan|ha|sahi hai)(?!\S)"
+            r"(?<!\S)(yes|yeah|yep|yup|sure|correct|confirm|go ahead|sounds good|that's right|i agree|affirmative|absolutely|sí|si|correcto|de acuerdo|confirmo|adelante|haan|ha|sahi hai|1)(?!\S)"
         ],
         IntentEnum.CONFIRMATION_NO: [
-            r"(?<!\S)(no|nope|nah|cancel|negative|wrong|don't|stop|cancelar|incorrecto|parar|nahi|nahin|na|mat karo)(?!\S)",
+            r"(?<!\S)(no|nope|nah|cancel|negative|wrong|don't|stop|cancelar|incorrecto|parar|nahi|nahin|na|mat karo|2)(?!\S)",
             r"(?<!\S)(no thanks|no thank you)(?!\S)"
         ]
     }

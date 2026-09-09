@@ -169,6 +169,8 @@ class DialogueOrchestrator:
             "audio_base64": audio_base64,
             "audio_degraded": audio_base64 is None,
             "state": new_state.value,
+            "language": self.fsm.language,
+            "caller_account": self.fsm.account.model_dump() if self.fsm.account else None,
             "escalated": bool(escalation_payload),
             "escalation_payload": escalation_payload.model_dump() if escalation_payload else None
         }
