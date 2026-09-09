@@ -1,0 +1,22 @@
+services:
+  voicenexus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voicenexus-ivr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - STT_ENABLED=true
+      - STT_MODEL_SIZE=small
+    volumes:
+      # Persist admin settings and telecom knowledge base across restarts
+      - ./backend/data:/app/backend/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

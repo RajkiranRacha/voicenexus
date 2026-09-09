@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import {
-  Sliders, Mic, Building2, Save, Check, ShieldAlert, Volume2, Plus, Trash2
+  Sliders, Mic, Building2, Save, Check, ShieldAlert, Volume2, Plus, Trash2, BookOpen
 } from 'lucide-react';
 import { useAdminConfig } from '../hooks/useAdminConfig';
+import { TelecomKbManager } from './TelecomKbManager';
 
 export const AdminConfig: React.FC = () => {
+  const [adminTab, setAdminTab] = useState<'VOICE_PROMPTS' | 'TELECOM_KB'>('VOICE_PROMPTS');
   const cfg = useAdminConfig();
   const [newPattern, setNewPattern] = useState<string>("");
   const [newReplace, setNewReplace] = useState<string>("");
@@ -17,24 +19,50 @@ export const AdminConfig: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-100 flex items-center space-x-2">
-            <Sliders className="w-5 h-5 text-indigo-400" />
-            <span>Brand Voice, Prompts & Compliance Admin (VN-7, VN-9)</span>
-          </h2>
-          <p className="text-xs text-slate-400">
-            Tune neural voice persona, per-tenant greetings, regulatory disclosure, and pronunciation lexicons.
-          </p>
+      {/* Sub-tab Switcher: Voice/Prompts vs Knowledge Base */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setAdminTab('VOICE_PROMPTS')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all cursor-pointer ${
+              adminTab === 'VOICE_PROMPTS'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Brand Voice & Prompts</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminTab('TELECOM_KB')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all cursor-pointer ${
+              adminTab === 'TELECOM_KB'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span>Telecom Knowledge Base (Feed AI Data)</span>
+          </button>
         </div>
-        <button
-          onClick={cfg.saveSettings}
-          className="py-2.5 px-5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-2 shadow-lg shadow-indigo-950/40 transition-all cursor-pointer"
-        >
-          {cfg.savedSuccess ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
-          <span>{cfg.savedSuccess ? 'Settings Applied!' : 'Save Configuration'}</span>
-        </button>
+
+        {adminTab === 'VOICE_PROMPTS' && (
+          <button
+            onClick={cfg.saveSettings}
+            className="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-2 shadow-lg shadow-indigo-950/40 transition-all cursor-pointer"
+          >
+            {cfg.savedSuccess ? <Check className="w-4 h-4 text-emerald-300" /> : <Save className="w-4 h-4" />}
+            <span>{cfg.savedSuccess ? 'Settings Applied!' : 'Save Configuration'}</span>
+          </button>
+        )}
       </div>
+
+      {adminTab === 'TELECOM_KB' ? (
+        <TelecomKbManager />
+      ) : (
+        <div className="space-y-6">
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Brand Voice Tuning */}
@@ -278,6 +306,8 @@ export const AdminConfig: React.FC = () => {
           </button>
         </div>
       </div>
+      </div>
+      )}
     </div>
   );
 };

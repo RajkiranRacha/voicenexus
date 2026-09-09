@@ -105,3 +105,61 @@ def update_tenant_prompts(req: TenantPromptUpdate):
         config.PRONUNCIATION_OVERRIDES = req.pronunciation_overrides
     save_persisted_config()
     return {"success": True, "operator_name": config.OPERATOR_NAME}
+
+
+from app.services.telecom_kb import telecom_kb_service
+
+
+class KnowledgeArticleModel(BaseModel):
+    id: Optional[str] = None
+    topic: str
+    category: str = "General"
+    keywords: list[str] = []
+    questions: list[str] = []
+    answers: Dict[str, str] = {}
+    action_type: str = "RESOLVED_INFO"
+
+
+class KnowledgeTestRequest(BaseModel):
+    query: str
+    language: str = "en-US"
+
+
+class KnowledgeImportRequest(BaseModel):
+    articles: list[Dict]
+
+
+@router.get("/knowledge")
+def get_knowledge_base():
+    """Retrieve all telecom domain knowledge articles (Defect-2)."""
+    return telecom_kb_service.get_all()
+
+
+@router.post("/knowledge")
+def upsert_knowledge_article(article: KnowledgeArticleModel):
+    """Add or edit a telecom knowledge article."""
+    saved = telecom_kb_service.upsert_article(article.model_dump())
+    return {"success": True, "article": saved}
+
+
+@router.delete("/knowledge/{article_id}")
+def delete_knowledge_article(article_id: str):
+    """Delete a telecom knowledge article."""
+    success = telecom_kb_service.delete_article(article_id)
+    return {"success": success, "article_id": article_id}
+
+
+@router.post("/knowledge/import")
+def import_knowledge_articles(req: KnowledgeImportRequest):
+    """Batch import knowledge articles from JSON."""
+    count = telecom_kb_service.import_batch(req.articles)
+    return {"success": True, "imported_count": count}
+
+
+@router.post("/knowledge/test")
+def test_knowledge_query(req: KnowledgeTestRequest):
+    """Test how the AI resolves a given query using the telecom KB."""
+    match = telecom_kb_service.find_match(req.query, language=req.language)
+    if match:
+        return {"matched": True, **match}
+    return {"matched": False, "message": "No article matched with confidence >= 0.70. Would trigger standard flow or escalation."}

@@ -13,6 +13,7 @@ from app.engine.flows.billing_flow import BillingFlow
 from app.engine.flows.outage_triage_flow import OutageTriageFlow
 from app.engine.flows.plan_flow import PlanFlow
 from app.engine.flows.callback_flow import CallbackFlow
+from app.services.telecom_kb import telecom_kb_service
 
 class CallSessionStateMachine:
     """
@@ -33,6 +34,8 @@ class CallSessionStateMachine:
         self.escalation_payload: Optional[EscalationPayload] = None
         self.account: Optional[SubscriberAccount] = None
         self.language: str = config.LANGUAGE
+        self.should_close_call: bool = False
+        self.has_resolved_action: bool = False
 
         # Execute Tier 1 Passive ANI Verification
         auth_status, acc = identity_service.verify_ani(ani)
@@ -74,7 +77,18 @@ class CallSessionStateMachine:
                 notes=f"Caller requested human agent with utterance: '{user_text}'"
             )
 
-        # 2. Check for Language Switch (VN-7)
+        # 2. Check for explicit call drop commands (regardless of state)
+        if any(term in lowered for term in [
+            "drop now", "drop the call", "good to drop", "hang up now",
+            "ready to drop", "no more concerns", "thanks for resolving",
+            "thank you for resolving", "thanks for fixing"
+        ]):
+            self.consecutive_unrecognized = 0
+            self.state = CallState.RESOLVED_CONTAINED
+            self.should_close_call = True
+            return t("wrapup.closing", self.language), self.state, None
+
+        # 3. Check for Language Switch (VN-7)
         if intent == IntentEnum.LANGUAGE_SELECT:
             if any(w in lowered for w in ["spanish", "español"]):
                 self.language = "es-US"
@@ -98,7 +112,7 @@ class CallSessionStateMachine:
                     None
                 )
 
-        # 3. Handle Identity Verification / Auth Challenge (VN-3)
+        # 4. Handle Identity Verification / Auth Challenge (VN-3)
         if self.state == CallState.AUTH_CHALLENGE:
             # Check for Knowledge-Based Auth (Account Number or Zip Code)
             acc = identity_service.verify_knowledge_based(user_text)
@@ -153,11 +167,28 @@ class CallSessionStateMachine:
                 None
             )
 
-        # 4. If in active subflow execution, continue that subflow
+        # 5. If in active subflow execution, continue that subflow
         if self.state in [CallState.SUBFLOW_EXECUTION, CallState.CONFIRMATION_PENDING]:
             return self._continue_subflow(user_text, intent)
 
-        # 5. Handle Conversational Responses (Gratitude, Acknowledgement, Confirmation, Rejection)
+        # 6. Check for Call Wrap-Up / Resolution Confirmation (Defect-1)
+        if intent == IntentEnum.CALL_WRAPUP:
+            self.consecutive_unrecognized = 0
+            self.state = CallState.RESOLVED_CONTAINED
+            self.should_close_call = True
+            return t("wrapup.closing", self.language), self.state, None
+
+        # If previous action was resolved or state is resolved, and caller acknowledges with gratitude/closing/no
+        if (self.has_resolved_action or self.state == CallState.RESOLVED_CONTAINED) and (
+            intent in [IntentEnum.GRATITUDE, IntentEnum.CONFIRMATION_NO, IntentEnum.REJECTION] or
+            any(w in lowered for w in ["thank you", "thanks", "no", "that's all", "thats all", "all good", "nothing else", "bye", "drop", "resolv", "gracias", "dhanyavaad"])
+        ):
+            self.consecutive_unrecognized = 0
+            self.state = CallState.RESOLVED_CONTAINED
+            self.should_close_call = True
+            return t("wrapup.closing", self.language), self.state, None
+
+        # 7. Handle Conversational Responses (Gratitude, Acknowledgement, Confirmation, Rejection)
         if intent == IntentEnum.GRATITUDE:
             self.consecutive_unrecognized = 0
             if any(phrase in lowered for phrase in [
@@ -165,6 +196,7 @@ class CallSessionStateMachine:
                 "no need", "bien", "nada más", "nada mas", "kuch nahi", "sab theek", "sab thik",
                 "goodbye", "good bye", "bye", "adios", "adiós", "hasta luego", "alvida", "अलविदा", "see you", "have a"
             ]):
+                self.should_close_call = True
                 return t("gratitude.closing", self.language), CallState.RESOLVED_CONTAINED, None
             return t("gratitude.continue", self.language), CallState.INTENT_ROUTING, None
 
@@ -178,9 +210,10 @@ class CallSessionStateMachine:
 
         if intent in [IntentEnum.REJECTION, IntentEnum.CONFIRMATION_NO]:
             self.consecutive_unrecognized = 0
+            self.should_close_call = True
             return t("rejection.closing", self.language), CallState.RESOLVED_CONTAINED, None
 
-        # 6. Intent Routing Phase
+        # 7. Intent Routing Phase
         if intent in [
             IntentEnum.BILLING_INQUIRY,
             IntentEnum.PAY_BILL_NOW,
@@ -191,6 +224,15 @@ class CallSessionStateMachine:
             IntentEnum.CALLBACK_SCHEDULE
         ]:
             return self._route_intent(intent, user_text)
+
+        # 8. Check Telecom Domain Knowledge Base (Defect-2)
+        kb_match = telecom_kb_service.find_match(user_text, language=self.language)
+        if kb_match:
+            self.consecutive_unrecognized = 0
+            self.current_intent = IntentEnum.TELECOM_KNOWLEDGE
+            self.has_resolved_action = True
+            self.state = CallState.RESOLVED_CONTAINED
+            return kb_match["answer"], self.state, None
 
         # 7. Handle Unrecognized Utterance
         self.consecutive_unrecognized += 1
@@ -256,6 +298,7 @@ class CallSessionStateMachine:
             )
         if is_resolved:
             self.state = CallState.RESOLVED_CONTAINED
+            self.has_resolved_action = True
         return response, self.state, None
 
     def _execute_outage_turn(self, user_text: str):
@@ -271,6 +314,7 @@ class CallSessionStateMachine:
             )
         if is_resolved:
             self.state = CallState.RESOLVED_CONTAINED
+            self.has_resolved_action = True
         return response, self.state, None
 
     def _execute_plan_turn(self, user_text: str):
@@ -286,6 +330,7 @@ class CallSessionStateMachine:
             )
         if is_resolved:
             self.state = CallState.RESOLVED_CONTAINED
+            self.has_resolved_action = True
         return response, self.state, None
 
     def _execute_callback_turn(self, user_text: str):
@@ -301,6 +346,7 @@ class CallSessionStateMachine:
             )
         if is_resolved:
             self.state = CallState.RESOLVED_CONTAINED
+            self.has_resolved_action = True
         return response, self.state, None
 
     def _trigger_escalation(self, reason: str, notes: str) -> Tuple[str, CallState, EscalationPayload]:

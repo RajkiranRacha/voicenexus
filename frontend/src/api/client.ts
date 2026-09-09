@@ -24,6 +24,16 @@ export async function apiPost<T = unknown>(path: string, body?: unknown): Promis
   return res.json() as Promise<T>;
 }
 
+export async function apiDelete<T = unknown>(path: string): Promise<T> {
+  const res = await fetch(path, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error(`DELETE ${path} failed with status ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 /** Builds a same-origin ws:// or wss:// URL matching the page's protocol. */
 export function wsUrl(path: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

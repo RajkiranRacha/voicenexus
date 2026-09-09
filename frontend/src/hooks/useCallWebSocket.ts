@@ -27,6 +27,9 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
   const callStateRef = useRef<CallUiState>(callState);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
 
+  const endCallRef = useRef<() => void>(() => {});
+  const autoCloseTimerRef = useRef<number | null>(null);
+
   // Sync the pre-call language badge/speech-recognition default from the
   // operator's configured language before any call has started.
   useEffect(() => {
@@ -105,6 +108,12 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
           if (data.audio_base64 && autoPlayAudio) {
             playAudioBase64(data.audio_base64);
           }
+          if (data.should_close_call) {
+            if (autoCloseTimerRef.current) window.clearTimeout(autoCloseTimerRef.current);
+            autoCloseTimerRef.current = window.setTimeout(() => {
+              endCallRef.current?.();
+            }, 3800);
+          }
         } else if (data.type === 'AGENT_CONNECTED') {
           setCallState('IN_CALL');
           setConnectedAgent({ id: data.agent_id, name: data.agent_name || "Sarah J. (Care Specialist)" });
@@ -162,6 +171,10 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
   }, [playAudioBase64, webrtc]);
 
   const endCall = useCallback(() => {
+    if (autoCloseTimerRef.current) {
+      window.clearTimeout(autoCloseTimerRef.current);
+      autoCloseTimerRef.current = null;
+    }
     stopPlayback();
     webrtc.close();
     setConnectedAgent(null);
@@ -172,6 +185,18 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     }
     setCallState('ENDED');
   }, [stopPlayback, webrtc]);
+
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
+
+  useEffect(() => {
+    return () => {
+      if (autoCloseTimerRef.current) {
+        window.clearTimeout(autoCloseTimerRef.current);
+      }
+    };
+  }, []);
 
   const sendUtterance = useCallback((text: string, setInputText?: (v: string) => void) => {
     if (!text.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
