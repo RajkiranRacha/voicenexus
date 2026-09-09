@@ -124,6 +124,15 @@ flowchart TB
 
 The platform has recently undergone substantial architectural hardening and UX polish:
 
+- **QA Suite Hardening & Bug Fixes** (`test_qa_suite_fixes.py`, 8 new regression tests):
+  - **Plan Flow Fix**: Resolved a stuck transition where hearing plan details before requesting an upgrade (*"What plan am I on?"* → *"Can I upgrade?"*) failed to route into the upgrade offer; added an explicit `DETAILS_PROVIDED` step handling upgrade/decline/fallback branches in English, Spanish, and Hindi.
+  - **DTMF Numeric Confirmation**: Touch-tone `1` / `2` now resolve as universal affirmative/negative confirmations (e.g. confirming a card payment or a payment arrangement) across every subflow, not just the dialpad menu.
+  - **Multilingual Goodbye Handling**: Parting phrases (*"Goodbye"*, *"Adiós, muchas gracias"*, *"अलविदा, धन्यवाद"*) are now recognized as gratitude/closing intents and resolve the call cleanly instead of falling through to an unrecognized-turn counter.
+  - **Multilingual Escalation Prompt**: Added dedicated Spanish and Hindi `escalation.prompt` strings so a live-agent handoff is announced in the caller's active language instead of silently falling back to English.
+  - **Robust Affirmative/Negative Matching**: `is_affirmative` / `is_negative` now tokenize input (word-boundary matching) instead of naive substring checks, eliminating false positives (e.g. "nowhere" no longer matching "no") while still catching numeric DTMF input and multi-word phrases.
+  - **Telemetry Deduplication**: `record_completed_call` now updates the existing Call Detail Record in place when a session resolves more than once (e.g. a parting turn following a prior resolution) instead of inserting a duplicate row, and preserves any already-captured CSAT rating.
+  - **Agent Hub Cleanup**: `unregister_caller` now also purges any pending escalation payload for that session, preventing stale escalations from lingering in the Agent Desktop queue after a caller disconnects.
+
 - **Multilingual Dialogue Engine (`en`, `es`, `hi`)**:
   - Full native dialogue support for **English**, **Spanish**, and **Hindi**.
   - Dynamic, mid-call language switching (e.g., *"Quiero hablar en español"*, *"hindi mein baat karo"*, *"switch back to english"*). The conversational state machine preserves active session context across language transitions.
@@ -202,6 +211,7 @@ voicenexus/
 │   │   ├── test_flows.py                  # Core dialogue, subflow, and language switch tests
 │   │   ├── test_intent_benchmark.py       # Intent recognition benchmark suite
 │   │   ├── test_issues_fixes.py           # Regression test suite for previous fixes
+│   │   ├── test_qa_suite_fixes.py         # E2E QA regression suite (plan flow, DTMF, i18n goodbye/escalation, telemetry dedup)
 │   │   ├── test_stt_service.py            # STT audio decoding & transcription tests
 │   │   ├── test_telemetry_enhancements.py # Abandonment, CSAT & CSV export tests
 │   │   └── test_websocket_e2e.py          # Full WebSocket & WebRTC voice bridge E2E tests
@@ -350,6 +360,12 @@ python -m pytest tests/test_intent_benchmark.py -v
 
 # Run full end-to-end WebSocket & WebRTC suite:
 python -m pytest tests/test_websocket_e2e.py -v
+
+# Run the QA regression suite (plan flow, DTMF, multilingual goodbye/escalation, telemetry dedup):
+python -m pytest tests/test_qa_suite_fixes.py -v
+
+# Run the entire test suite:
+python -m pytest -v
 ```
 
 ---

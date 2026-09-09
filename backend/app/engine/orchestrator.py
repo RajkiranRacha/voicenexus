@@ -172,7 +172,8 @@ class DialogueOrchestrator:
             "language": self.fsm.language,
             "caller_account": self.fsm.account.model_dump() if self.fsm.account else None,
             "escalated": bool(escalation_payload),
-            "escalation_payload": escalation_payload.model_dump() if escalation_payload else None
+            "escalation_payload": escalation_payload.model_dump() if escalation_payload else None,
+            "should_close_call": self.fsm.should_close_call
         }
 
     def handle_barge_in(self):

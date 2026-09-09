@@ -40,7 +40,11 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
     },
 
-    # -- state_machine.py: conversational responses --------------------------
+    "wrapup.closing": {
+        "es": "¡Con gusto! Nos alegra haberle ayudado a resolver su consulta. Gracias por ser cliente de NexusFiber. ¡Que tenga un excelente día! ¡Hasta luego!",
+        "hi": "आपका बहुत-बहुत स्वागत है! हमें खुशी है कि आपकी समस्या का समाधान हो गया। NexusFiber Telco में कॉल करने के लिए धन्यवाद। आपका दिन शुभ हो! अलविदा!",
+        "en": "You're very welcome! We're glad your issue was resolved. Thank you for choosing NexusFiber Telco. Have a wonderful day! Goodbye.",
+    },
     "gratitude.closing": {
         "es": "¡De nada! Si no necesita nada más, gracias por ser cliente de NexusFiber. ¡Que tenga un excelente día!",
         "hi": "आपका बहुत-बहुत स्वागत है! यदि आपको और सहायता की आवश्यकता नहीं है, तो NexusFiber का ग्राहक बनने के लिए धन्यवाद। आपका दिन शुभ हो!",

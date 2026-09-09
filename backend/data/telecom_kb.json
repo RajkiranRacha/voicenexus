@@ -1,0 +1,237 @@
+[
+  {
+    "id": "esim_activation",
+    "topic": "eSIM Activation & Digital SIM Transfer",
+    "category": "Device & SIM",
+    "keywords": [
+      "esim",
+      "activate esim",
+      "qr code",
+      "transfer esim",
+      "digital sim",
+      "install esim",
+      "switch to esim",
+      "convert sim"
+    ],
+    "questions": [
+      "How do I activate eSIM on my phone?",
+      "Where can I find the eSIM QR code?",
+      "Can I transfer my eSIM from an old phone to a new phone?",
+      "How does digital SIM work?"
+    ],
+    "answers": {
+      "en": "To activate your eSIM, ensure your phone is connected to Wi-Fi. Go to Settings, select Cellular or Mobile Network, and tap 'Add eSIM' or 'Transfer from Nearby Phone'. Scan the QR code sent to your registered email or available in the NexusFiber mobile app. Activation completes in under 2 minutes. Can I help you with anything else today?",
+      "es": "Para activar su eSIM, asegúrese de que su teléfono esté conectado a Wi-Fi. Vaya a Configuración, toque Red Móvil y elija 'Agregar eSIM'. Escanee el código QR enviado a su correo electrónico o en la app NexusFiber. Se activará en menos de dos minutos. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "eSIM सक्रिय करने के लिए अपने फोन को वाई-फाई से कनेक्ट करें। सेटिंग्स में जाएं, मोबाइल नेटवर्क चुनें और 'Add eSIM' पर क्लिक करें। अपने ईमेल पर भेजा गया क्यूआर कोड स्कैन करें। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "international_roaming",
+    "topic": "International Roaming & Global Day Pass",
+    "category": "Roaming & Travel",
+    "keywords": [
+      "roaming",
+      "international roaming",
+      "travel pass",
+      "roaming pack",
+      "overseas",
+      "data abroad",
+      "travel day pass",
+      "traveling abroad",
+      "international pass"
+    ],
+    "questions": [
+      "How do I use my phone while traveling abroad?",
+      "What is the cost of international roaming?",
+      "How do I activate the Global Day Pass?",
+      "Do I get unlimited data overseas?"
+    ],
+    "answers": {
+      "en": "NexusFiber offers the Global Passport Day Pass for $10 per day, giving you unlimited high-speed data, talk, and text across 180 countries. You are only charged on days you actively use data or make calls outside the country. Before traveling, turn on 'Data Roaming' in your phone settings. Can I help you with anything else today?",
+      "es": "NexusFiber ofrece el Pase Diario Global por $10 al día con datos ilimitados, llamadas y mensajes en más de 180 países. Solo se le cobra los días que lo use en el extranjero. Active 'Itinerancia de Datos' en la configuración de su teléfono. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "NexusFiber $10 प्रति दिन में ग्लोबल पासपोर्ट डे पास प्रदान करता है, जिसमें 180 देशों में असीमित डेटा, कॉल और मैसेज शामिल हैं। यात्रा से पहले फोन में 'Data Roaming' चालू कर लें। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "wifi_password_change",
+    "topic": "Wi-Fi Password & Network Name (SSID)",
+    "category": "Wi-Fi & Broadband",
+    "keywords": [
+      "wifi password",
+      "change wifi password",
+      "change network name",
+      "ssid",
+      "reset wifi",
+      "forgot wifi password",
+      "wifi name"
+    ],
+    "questions": [
+      "How do I change my Wi-Fi password?",
+      "Where can I find my Wi-Fi network name?",
+      "Can I separate 2.4GHz and 5GHz Wi-Fi bands?"
+    ],
+    "answers": {
+      "en": "You can change your Wi-Fi name and password directly in the NexusFiber mobile app under 'My Network'. Alternatively, connect a device to your router, open a web browser to 192.168.1.1, and log in with the admin credentials printed on the router label. Can I help you with anything else today?",
+      "es": "Puede cambiar el nombre y la contraseña de su Wi-Fi en la app NexusFiber en 'Mi Red', o abriendo 192.168.1.1 en su navegador con las credenciales impresas en la etiqueta de su router. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "आप NexusFiber मोबाइल ऐप में 'My Network' के तहत या ब्राउज़र में 192.168.1.1 पर जाकर अपने वाई-फाई का नाम और पासवर्ड बदल सकते हैं। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "router_lights_diagnostic",
+    "topic": "Router & Fiber ONT Status Lights Diagnostic",
+    "category": "Equipment & Hardware",
+    "keywords": [
+      "router light",
+      "red light",
+      "blinking red",
+      "pon light",
+      "los light",
+      "ont light",
+      "amber light",
+      "internet light red",
+      "flashing red"
+    ],
+    "questions": [
+      "Why is my router light blinking red?",
+      "What does the LOS red light mean on my fiber box?",
+      "What should the normal lights on my optical terminal look like?"
+    ],
+    "answers": {
+      "en": "On your fiber optical terminal, the PON light should be solid green and the LOS light must be off. If the LOS light is blinking red, it indicates a fiber signal interruption. Please verify that the thin fiber cable is firmly plugged into the green port on your ONT. If it stays red, we can schedule an on-site technician. Can I help you with anything else today?",
+      "es": "En su terminal de fibra, la luz PON debe estar verde fijo y la luz LOS apagada. Si la luz LOS parpadea en rojo, indica que no recibe señal de fibra óptica. Verifique que el cable esté bien insertado. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "फाइबर बॉक्स पर PON लाइट हरी होनी चाहिए और LOS लाइट बंद होनी चाहिए। यदि LOS लाइट लाल चमक रही है, तो फाइबर केबल की जांच करें। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "number_portability_mnp",
+    "topic": "Mobile Number Portability (MNP) & Transfer PIN",
+    "category": "Account & Porting",
+    "keywords": [
+      "port number",
+      "transfer number",
+      "mnp",
+      "port out",
+      "transfer pin",
+      "porting",
+      "keep my number",
+      "pac code",
+      "switch carrier"
+    ],
+    "questions": [
+      "How do I transfer my phone number to another carrier?",
+      "How do I get a Number Transfer PIN?",
+      "What do I need to port my number to NexusFiber?"
+    ],
+    "answers": {
+      "en": "To transfer your phone number, you need your NexusFiber account number and a 6-digit Number Transfer PIN. You can generate a Transfer PIN anytime by texting PORT to 7678 or in the NexusFiber mobile app under Account Security. The PIN is valid for 7 days. Can I help you with anything else today?",
+      "es": "Para transferir su número, necesita su número de cuenta y un PIN de Transferencia de 6 dígitos. Genérelo enviando un SMS con la palabra PORT al 7678 o en la app NexusFiber. El PIN es válido durante 7 días. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "अपना नंबर पोर्ट करने के लिए खाता संख्या और 6 अंकों का ट्रांसफर पिन आवश्यक है। आप 7678 पर PORT लिखकर एसएमएस भेजकर पिन प्राप्त कर सकते हैं। यह 7 दिनों के लिए वैध है। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "service_relocation_moving",
+    "topic": "Moving Home & Fiber Service Relocation",
+    "category": "Account & Porting",
+    "keywords": [
+      "moving",
+      "move house",
+      "relocation",
+      "relocate service",
+      "transfer service",
+      "new address",
+      "change address",
+      "new home"
+    ],
+    "questions": [
+      "How do I move my fiber internet to my new house?",
+      "Do I take my fiber box when moving?",
+      "How far in advance should I notify you about moving?"
+    ],
+    "answers": {
+      "en": "NexusFiber allows you to seamlessly move your fiber service to your new address. Please notify us at least two weeks before your moving date. Leave the fiber optical terminal at your current home, but bring your Wi-Fi router and power cords to your new address. Can I help you with anything else today?",
+      "es": "NexusFiber le permite transferir su servicio a su nueva dirección con solo avisarnos dos semanas antes de su mudanza. Deje el terminal de fibra en su domicilio actual y lleve su router Wi-Fi al nuevo hogar. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "घर बदलते समय 2 सप्ताह पहले सूचित करके कनेक्शन नए पते पर ट्रांसफर करवा सकते हैं। फाइबर टर्मिनल वहीं छोड़ें और वाई-फाई राउटर साथ ले जाएं। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "apn_5g_settings",
+    "topic": "5G APN & Mobile Data Configuration",
+    "category": "Device & SIM",
+    "keywords": [
+      "apn",
+      "apn settings",
+      "access point name",
+      "5g settings",
+      "cellular data not working",
+      "mobile data config",
+      "internet settings"
+    ],
+    "questions": [
+      "What are the APN settings for NexusFiber 5G?",
+      "Why is cellular data not connecting on my device?",
+      "How do I configure my Access Point Name?"
+    ],
+    "answers": {
+      "en": "For NexusFiber 5G data, configure your APN to 'broadband.nexusfiber.net' with APN type set to 'default,supl'. Leave Username and Password empty. After saving the profile, toggle Airplane Mode on and off to reconnect. Can I help you with anything else today?",
+      "es": "Para datos 5G de NexusFiber, establezca el APN en 'broadband.nexusfiber.net' con tipo 'default,supl'. Deje usuario y contraseña en blanco. Luego active y desactive el Modo Avión para reconectar. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "NexusFiber 5G डेटा के लिए APN में 'broadband.nexusfiber.net' दर्ज करें। यूजरनेम और पासवर्ड खाली छोड़ें। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "autopay_paperless_discount",
+    "topic": "Autopay & Paperless Billing Discounts",
+    "category": "Billing & Payments",
+    "keywords": [
+      "autopay discount",
+      "discount",
+      "lower bill",
+      "paperless discount",
+      "save money",
+      "monthly discount",
+      "automatic payment discount"
+    ],
+    "questions": [
+      "How do I get the $10 Autopay discount?",
+      "Does credit card autopay qualify for a discount?",
+      "How do I enroll in Paperless Billing?"
+    ],
+    "answers": {
+      "en": "You receive a $10 monthly discount by enrolling in Autopay with a checking bank account or debit card, combined with Paperless Billing. Credit card autopay provides a $5 monthly discount. You can enroll in seconds via the NexusFiber portal or mobile app. Can I help you with anything else today?",
+      "es": "Reciba un descuento mensual de $10 inscribiéndose en Pago Automático con cuenta bancaria o tarjeta de débito y Factura Electrónica. El pago con tarjeta de crédito ofrece un descuento de $5. Puede activarlo en el portal o app móvil. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "बैंक खाते या डेबिट कार्ड से ऑटोपे और पेपरलेस बिलिंग सक्षम करके आप प्रति माह $10 की छूट पा सकते हैं। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  },
+  {
+    "id": "equipment_return_policy",
+    "topic": "Equipment Returns & Avoiding Unreturned Fees",
+    "category": "Equipment & Hardware",
+    "keywords": [
+      "return equipment",
+      "return router",
+      "return box",
+      "unreturned fee",
+      "return label",
+      "ups return",
+      "return device"
+    ],
+    "questions": [
+      "How do I return my leased router?",
+      "What happens if I don't return equipment within 21 days?",
+      "Where can I drop off returned equipment?"
+    ],
+    "answers": {
+      "en": "When upgrading or cancelling service, return the leased Wi-Fi router and power supply within 21 days to avoid an unreturned equipment fee. We email you a prepaid UPS shipping label, or you can bring the equipment directly to any UPS Store with your account number. Can I help you with anything else today?",
+      "es": "Al cambiar o cancelar el servicio, devuelva el router y cargador dentro de los 21 días para evitar cargos. Le enviamos una etiqueta prepagada de UPS o puede llevarlo a cualquier tienda UPS con su número de cuenta. ¿Puedo ayudarle con algo más hoy?",
+      "hi": "सेवा बदलने या बंद करने पर 21 दिनों में राउटर और चार्जर लौटाएं। हम ईमेल पर प्रीपेड यूपीएस रिटर्न लेबल भेजते हैं। क्या मैं आपकी किसी और चीज़ में मदद कर सकता हूँ?"
+    },
+    "action_type": "RESOLVED_INFO"
+  }
+]

@@ -18,13 +18,25 @@ class SPAStaticFiles(StaticFiles):
     no visible error -- clicks land in dead code with no console output.
     Force index.html (and any HTML-mode fallback) to always revalidate,
     while hashed assets stay immutable.
+    Also handles SPA client-side routes (/customer, /agent, /ops, /admin, etc.)
+    by falling back to index.html instead of returning 404.
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        response = await super().get_response(path, scope)
-        # StaticFiles.get_path() joins with os.path.join, so on Windows this
-        # is backslash-separated -- normalize before matching.
         normalized = path.replace("\\", "/").lstrip("/")
+        try:
+            response = await super().get_response(path, scope)
+            if response.status_code == 404 and not normalized.startswith("api/"):
+                fallback_resp = await super().get_response("index.html", scope)
+                fallback_resp.headers["Cache-Control"] = "no-cache"
+                return fallback_resp
+        except Exception:
+            if not normalized.startswith("api/"):
+                fallback_resp = await super().get_response("index.html", scope)
+                fallback_resp.headers["Cache-Control"] = "no-cache"
+                return fallback_resp
+            raise
+
         if normalized.startswith("assets/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         else:

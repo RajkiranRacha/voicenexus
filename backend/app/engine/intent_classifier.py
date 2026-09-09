@@ -42,6 +42,17 @@ class IntentClassifier:
         IntentEnum.CALLBACK_SCHEDULE: [
             r"(?<!\S)(call me back|callback|schedule a call|ring me later|llámame más tarde|devolver llamada|programar llamada|मुझे वापस कॉल करें|कॉलबैक|बाद में कॉल करें|फिर से कॉल)(?!\S)"
         ],
+        IntentEnum.CALL_WRAPUP: [
+            r"(?<!\S)(no\s+thanks?\s+for\s+resolving|thanks?\s+for\s+resolving|thank\s+you\s+for\s+resolving|thanks?\s+for\s+fixing|thank\s+you\s+for\s+fixing|thanks?\s+for\s+helping|thank\s+you\s+for\s+helping)(?!\S)",
+            r"(?<!\S)(issue\s+(is\s+)?resolved|problem\s+(is\s+)?(resolved|fixed)|all\s+(is\s+)?resolved|everything\s+(is\s+)?resolved|it\'?s?\s+resolved)(?!\S)",
+            r"(?<!\S)(no\s+(more\s+)?concerns?|no\s+(more\s+)?issues?|no\s+(more\s+)?questions?|nothing\s+else\s+needed)(?!\S)",
+            r"(?<!\S)(good\s+to\s+drop(\s+now)?|good\s+to\s+hang\s*up(\s+now)?|ready\s+to\s+drop|ready\s+to\s+hang\s*up|you\s+can\s+hang\s*up|drop\s+the\s+call|end\s+(the\s+)?call\s+now)(?!\S)",
+            r"(?<!\S)(no\s*,\s*thanks?|no\s+thanks?|no\s+thank\s+you|no\s+thats?\s+all|no\s+that\s+is\s+all|nothing\s+else\s*,\s*thanks?|nothing\s+else\s+thanks?|nothing\s+else\s+thank\s+you)(?!\S)",
+            r"(?<!\S)(all\s+good\s+thanks?|all\s+set\s+thanks?|that\'?s?\s+(all|everything)\s*,\s*thanks?|that\'?s?\s+(all|everything)\s+thanks?|that\'?s?\s+(all|everything)\s+thank\s+you)(?!\S)",
+            r"(?<!\S)(that\s+resolves\s+it|that\s+answers\s+it|that\s+did\s+it|that\s+fixed\s+it)(?!\S)",
+            r"(?<!\S)(no\s+gracias|todo\s+resuelto|nada\s+más\s+gracias|ya\s+quedó\s+gracias|puede\s+colgar|no\s+tengo\s+más\s+dudas)(?!\S)",
+            r"(?<!\S)(nahi\s+dhanyavaad|sab\s+theek\s+ho\s+gaya|aur\s+kuch\s+nahi|call\s+kaat\s+sakte\s+hain|ho\s+gaya\s+dhanyavaad)(?!\S)"
+        ],
         IntentEnum.GRATITUDE: [
             r"(?<!\S)(thank you|thanks|thank you so much|thanks a lot|many thanks|appreciate it|i appreciate it|much appreciated)(?!\S)",
             r"(?<!\S)(i am good|i'm good|im good|all good|doing good|we are good|we're good|nothing else|that's all|thats all|that is all)(?!\S)",
@@ -78,22 +89,27 @@ class IntentClassifier:
             if re.search(pattern, cleaned) and not re.search(r"(?<!\S)(no|don\'t|dont|not)\s+(want|need)?\s*(an?\s+)?(agent|representative|human|operator)(?!\S)", cleaned):
                 return IntentEnum.AGENT_ESCALATION, 0.98, {"trigger": "explicit_agent_keyword"}
 
-        # Priority 2: Payment promise specific phrase
+        # Priority 2: Call Wrap-Up / Resolution Confirmation
+        for pattern in self.PATTERNS[IntentEnum.CALL_WRAPUP]:
+            if re.search(pattern, cleaned):
+                return IntentEnum.CALL_WRAPUP, 0.97, {"trigger": "call_wrapup_keyword"}
+
+        # Priority 3: Payment promise specific phrase
         for pattern in self.PATTERNS[IntentEnum.PAYMENT_PROMISE]:
             if re.search(pattern, cleaned):
                 return IntentEnum.PAYMENT_PROMISE, 0.95, {}
 
-        # Priority 3: Outage / Broadband triage
+        # Priority 4: Outage / Broadband triage
         for pattern in self.PATTERNS[IntentEnum.OUTAGE_TRIAGE]:
             if re.search(pattern, cleaned):
                 return IntentEnum.OUTAGE_TRIAGE, 0.94, {}
 
-        # Priority 4: Gratitude / Conversational polite response
+        # Priority 5: Gratitude / Conversational polite response
         for pattern in self.PATTERNS[IntentEnum.GRATITUDE]:
             if re.search(pattern, cleaned):
                 return IntentEnum.GRATITUDE, 0.95, {}
 
-        # Priority 5: Acknowledgement
+        # Priority 6: Acknowledgement
         for pattern in self.PATTERNS[IntentEnum.ACKNOWLEDGEMENT]:
             if re.search(pattern, cleaned):
                 return IntentEnum.ACKNOWLEDGEMENT, 0.93, {}
@@ -102,6 +118,7 @@ class IntentClassifier:
         for intent, patterns in self.PATTERNS.items():
             if intent in [
                 IntentEnum.AGENT_ESCALATION,
+                IntentEnum.CALL_WRAPUP,
                 IntentEnum.PAYMENT_PROMISE,
                 IntentEnum.OUTAGE_TRIAGE,
                 IntentEnum.GRATITUDE,
@@ -120,6 +137,8 @@ class IntentClassifier:
             IntentEnum.CONFIRMATION_YES: "Confirmation",
             IntentEnum.CONFIRMATION_NO: "Rejection",
             IntentEnum.GRATITUDE: "Gratitude",
+            IntentEnum.CALL_WRAPUP: "Call Wrap-Up",
+            IntentEnum.TELECOM_KNOWLEDGE: "Telecom Knowledge",
             IntentEnum.ACKNOWLEDGEMENT: "Acknowledgement",
             IntentEnum.BILLING_INQUIRY: "Billing Inquiry",
             IntentEnum.PAY_BILL_NOW: "Pay Bill Now",

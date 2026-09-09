@@ -34,5 +34,11 @@ export const PRESET_UTTERANCES = [
   { label: "Approve Router Reboot", text: "Yes, go ahead and send the reset signal to reboot my router." },
   { label: "Inquire Plan & Upgrade", text: "What plan am I on and can I upgrade to gigabit speed?" },
   { label: "Schedule a Callback", text: "I'd like to schedule a callback for tomorrow morning." },
+  { label: "Wrap-Up: No, Thanks for resolving", text: "No, Thanks for resolving" },
+  { label: "Wrap-Up: Good to drop now", text: "There is no more concerns good to drop now" },
+  { label: "Telecom KB: Activate eSIM", text: "How do I activate eSIM on my phone?" },
+  { label: "Telecom KB: Router Blinking Red", text: "Why is the red LOS light blinking on my router?" },
+  { label: "Telecom KB: Roaming Pass", text: "What roaming pass do I need while traveling abroad?" },
+  { label: "Telecom KB: Number Porting (MNP)", text: "How do I get a transfer PIN to port my number?" },
   { label: "Explicit Agent Request", text: "I need to speak to a human representative right now." }
 ];
