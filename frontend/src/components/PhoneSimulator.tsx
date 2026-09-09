@@ -129,6 +129,18 @@ export const PhoneSimulator: React.FC = () => {
                 </button>
               ))}
             </div>
+
+            <div className="pt-1.5">
+              <input
+                type="tel"
+                disabled={call.callState === 'IN_CALL' || call.callState === 'CONNECTING'}
+                value={customAni}
+                onChange={(e) => setCustomAni(e.target.value)}
+                placeholder="Or dial a custom ANI, e.g. +15551234567"
+                title="Any number not on file simulates an unregistered caller who must verify by account number or ZIP code."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+              />
+            </div>
           </div>
 
           {/* Active Call Controls */}
@@ -193,7 +205,7 @@ export const PhoneSimulator: React.FC = () => {
               {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map((digit) => (
                 <button
                   key={digit}
-                  disabled={call.callState !== 'IN_CALL'}
+                  disabled={call.callState !== 'IN_CALL' || call.awaitingResponse}
                   onClick={() => call.sendDtmf(digit)}
                   className="py-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 active:bg-indigo-600 text-slate-200 font-mono text-sm font-semibold disabled:opacity-40 transition-all cursor-pointer"
                 >
@@ -349,6 +361,12 @@ export const PhoneSimulator: React.FC = () => {
                 <span>VoiceNexus is speaking...</span>
               </span>
             )}
+            {call.awaitingResponse && !call.isPlayingAudio && (
+              <span className="text-[11px] text-indigo-300 flex items-center space-x-1.5 animate-pulse">
+                <Radio className="w-3.5 h-3.5" />
+                <span>VoiceNexus is thinking...</span>
+              </span>
+            )}
             {call.audioDegraded && (
               <span
                 className="text-[11px] text-amber-400 flex items-center space-x-1.5"
@@ -399,15 +417,15 @@ export const PhoneSimulator: React.FC = () => {
 
               <input
                 type="text"
-                disabled={call.callState !== 'IN_CALL'}
+                disabled={call.callState !== 'IN_CALL' || call.awaitingResponse}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendUtterance(inputText)}
-                placeholder={call.callState === 'IN_CALL' ? "Speak or type as caller (e.g., 'How much is my bill?')..." : "Start call to speak"}
+                placeholder={call.callState === 'IN_CALL' ? (call.awaitingResponse ? "Waiting for VoiceNexus to respond..." : "Speak or type as caller (e.g., 'How much is my bill?')...") : "Start call to speak"}
                 className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
               />
               <button
-                disabled={call.callState !== 'IN_CALL' || !inputText.trim()}
+                disabled={call.callState !== 'IN_CALL' || call.awaitingResponse || !inputText.trim()}
                 onClick={() => sendUtterance(inputText)}
                 className="px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
               >
@@ -428,8 +446,8 @@ export const PhoneSimulator: React.FC = () => {
             {PRESET_UTTERANCES.map((u, i) => (
               <button
                 key={i}
-                disabled={call.callState !== 'IN_CALL'}
-                onClick={() => sendUtterance(u.text)}
+                disabled={call.callState !== 'IN_CALL' || call.awaitingResponse}
+                onClick={(e) => { sendUtterance(u.text); e.currentTarget.blur(); }}
                 className="text-left p-2 rounded-xl bg-slate-850 hover:bg-indigo-950/60 border border-slate-800 hover:border-indigo-700/60 text-slate-300 hover:text-white text-[11px] transition-all disabled:opacity-40 disabled:hover:bg-slate-850 disabled:hover:border-slate-800 cursor-pointer"
               >
                 <div className="font-semibold text-indigo-400">{u.label}</div>
