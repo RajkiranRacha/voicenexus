@@ -141,6 +141,10 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
             });
           }
         } else if (data.type === 'CALL_ENDED') {
+          if (data.session_id) {
+            setEscalations(prev => prev.filter(e => e.session_id !== data.session_id));
+            setSelectedEscalation(prev => (prev && prev.session_id === data.session_id ? null : prev));
+          }
           if (data.session_id === activeCallSessionIdRef.current) {
             endActiveCall();
           }

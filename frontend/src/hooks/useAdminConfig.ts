@@ -10,16 +10,26 @@ export interface PronunciationRule {
 }
 
 /** Encapsulates AdminConfig's localStorage+server hydration, pronunciation-rule CRUD, and save flow. */
+function getCachedConfig(): Record<string, any> | null {
+  try {
+    const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useAdminConfig() {
-  const [operatorName, setOperatorName] = useState<string>("NexusFiber Telco");
+  const cached = getCachedConfig();
+  const [operatorName, setOperatorName] = useState<string>(cached?.operator_name || "NexusFiber Telco");
   const [greetingPrompt, setGreetingPrompt] = useState<string>(
-    "Thank you for calling NexusFiber Care. I am your automated digital assistant. How can I help you today?"
+    cached?.greeting_prompt || "Thank you for calling NexusFiber Care. I am your automated digital assistant. How can I help you today?"
   );
   const [spanishGreeting, setSpanishGreeting] = useState<string>(
-    "Gracias por llamar a NexusFiber Atención al Cliente. Soy su asistente digital automatizado. ¿Cómo le puedo ayudar hoy?"
+    cached?.spanish_greeting_prompt || "Gracias por llamar a NexusFiber Atención al Cliente. Soy su asistente digital automatizado. ¿Cómo le puedo ayudar hoy?"
   );
   const [hindiGreeting, setHindiGreeting] = useState<string>(
-    "NexusFiber में कॉल करने के लिए धन्यवाद। मैं आपका स्वचालित डिजिटल सहायक हूँ। मैं आज आपकी क्या सहायता कर सकता हूँ?"
+    cached?.hindi_greeting_prompt || "NexusFiber में कॉल करने के लिए धन्यवाद। मैं आपका स्वचालित डिजिटल सहायक हूँ। मैं आज आपकी क्या सहायता कर सकता हूँ?"
   );
   const [holdPrompt, setHoldPrompt] = useState<string>(
     "Please hold for just a moment while I pull up your account records."
@@ -34,9 +44,9 @@ export function useAdminConfig() {
   const [disclosurePrompt, setDisclosurePrompt] = useState<string>(
     "This call may be recorded for quality assurance and uses automated intelligence."
   );
-  const [selectedVoice, setSelectedVoice] = useState<string>("en-US-JennyNeural");
-  const [speechRate, setSpeechRate] = useState<string>("+0%");
-  const [language, setLanguage] = useState<string>("en-US");
+  const [selectedVoice, setSelectedVoice] = useState<string>(cached?.default_voice || "en-US-JennyNeural");
+  const [speechRate, setSpeechRate] = useState<string>(cached?.voice_rate || "+0%");
+  const [language, setLanguage] = useState<string>(cached?.language || "en-US");
   const [pronunciations, setPronunciations] = useState<PronunciationRule[]>([
     { pattern: "\\bONT\\b", replace: "O-N-T" },
     { pattern: "\\bVoIP\\b", replace: "Voice over I-P" },
@@ -47,22 +57,6 @@ export function useAdminConfig() {
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   useEffect(() => {
-    // 1. Instant recovery from localStorage if present
-    try {
-      const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (cached) {
-        const d = JSON.parse(cached);
-        if (d.operator_name) setOperatorName(d.operator_name);
-        if (d.greeting_prompt) setGreetingPrompt(d.greeting_prompt);
-        if (d.spanish_greeting_prompt) setSpanishGreeting(d.spanish_greeting_prompt);
-        if (d.hindi_greeting_prompt) setHindiGreeting(d.hindi_greeting_prompt);
-        if (d.default_voice) setSelectedVoice(d.default_voice);
-        if (d.voice_rate) setSpeechRate(d.voice_rate);
-        if (d.language) setLanguage(d.language);
-      }
-    } catch {
-      // ignore JSON parse error
-    }
 
     // 2. Fetch server authoritative configuration
     apiGet<AdminConfigData>('/api/admin/config')

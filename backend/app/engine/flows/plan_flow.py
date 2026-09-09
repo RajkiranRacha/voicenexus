@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple
 from app.models.schemas import SubscriberAccount, AuthStatus
-from app.engine.nlu_utils import is_affirmative
+from app.engine.nlu_utils import is_affirmative, is_negative
 from app.i18n import t
 
 class PlanFlow:
@@ -28,6 +28,16 @@ class PlanFlow:
                 flow_context["step"] = "DETAILS_PROVIDED"
                 return t("plan.details", language, plan_name=account.plan_name, monthly_rate=account.monthly_rate), False, False, flow_context
 
+        elif step == "DETAILS_PROVIDED":
+            if is_affirmative(user_text, language) or any(term in lowered for term in ["upgrade", "faster", "more speed", "speed", "velocidad", "अपग्रेड", "स्पीड"]):
+                flow_context["step"] = "OFFER_UPGRADE"
+                return t("plan.offer_upgrade", language, plan_name=account.plan_name, monthly_rate=account.monthly_rate), False, False, flow_context
+            elif is_negative(user_text, language) or any(term in lowered for term in ["that's all", "thats all", "nothing", "all good", "all set", "nada", "kuch nahi", "bye"]):
+                flow_context["step"] = "COMPLETED"
+                return t("plan.upgrade_declined", language), True, False, flow_context
+            else:
+                return t("plan.fallback", language), False, False, flow_context
+
         elif step == "OFFER_UPGRADE":
             # "upgrade" is a domain-specific confirmation word here (caller repeating
             # the offered action), in addition to the generic affirmative vocabulary.
@@ -35,6 +45,7 @@ class PlanFlow:
                 flow_context["step"] = "CONFIRM_UPGRADE"
                 return t("plan.confirm_upgrade", language), False, False, flow_context
             else:
+                flow_context["step"] = "COMPLETED"
                 return t("plan.upgrade_declined", language), True, False, flow_context
 
         elif step == "CONFIRM_UPGRADE":
@@ -44,6 +55,7 @@ class PlanFlow:
                 flow_context["step"] = "COMPLETED"
                 return t("plan.upgrade_success", language), True, False, flow_context
             else:
+                flow_context["step"] = "COMPLETED"
                 return t("plan.upgrade_canceled", language), True, False, flow_context
 
         return t("plan.fallback", language), False, False, flow_context

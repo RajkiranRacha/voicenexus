@@ -22,18 +22,14 @@ const NAV_ITEMS = [
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'SIMULATOR' | 'AGENT' | 'OPS' | 'ADMIN'>('SIMULATOR');
   const [pendingCount, setPendingCount] = useState<number>(0);
-  const [showWelcome, setShowWelcome] = useState<boolean>(false);
-  const backendStatus = useHealthCheck();
-
-  useEffect(() => {
+  const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     try {
-      if (!localStorage.getItem(WELCOME_SEEN_KEY)) {
-        setShowWelcome(true);
-      }
+      return !localStorage.getItem(WELCOME_SEEN_KEY);
     } catch {
-      // ignore
+      return false;
     }
-  }, []);
+  });
+  const backendStatus = useHealthCheck();
 
   const dismissWelcome = () => {
     setShowWelcome(false);

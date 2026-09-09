@@ -82,6 +82,13 @@ class TelemetryService:
             "csat_rating": None,
             "timestamp": datetime.now().isoformat()
         }
+        for idx, existing in enumerate(self._records):
+            if existing["session_id"] == session_id:
+                if existing.get("csat_rating") is not None:
+                    record["csat_rating"] = existing["csat_rating"]
+                self._records[idx] = record
+                return
+
         self._records.insert(0, record)  # Most recent first
 
     def record_csat(self, session_id: str, rating: int) -> bool:
