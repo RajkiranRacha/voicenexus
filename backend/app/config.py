@@ -78,16 +78,10 @@ class VoiceNexusConfig(BaseModel):
     # Local Speech-To-Text (VN-STT): server-side transcription via faster-whisper,
     # running fully offline/on-CPU so caller speech recognition doesn't depend on
     # the browser's opaque Web Speech API.
-    STT_ENABLED: bool = True
-    # tiny|base|small|medium|large-v3 — accuracy vs CPU-latency tradeoff. "base"
-    # was fast (~1-1.5s/chunk) but consistently misheard words under real
-    # conditions (e.g. "bill" -> "build"/"guild" on every attempt); "small"
-    # fixed that in live testing at the cost of ~3-4s/chunk on CPU, which will
-    # push the STT figure past this demo's 1000ms turn-latency SLO display -
-    # an accepted trade-off since a fast wrong transcript is worse than a
-    # slower correct one.
-    STT_MODEL_SIZE: str = "small"
-    STT_DEBUG_LOGGING: bool = False  # per-segment accept/reject diagnostics to server console
+    # Defaults to False in cloud/constrained environments like Render (512MB RAM free tier).
+    STT_ENABLED: bool = os.getenv("STT_ENABLED", "false").lower() in ("true", "1", "yes")
+    STT_MODEL_SIZE: str = os.getenv("STT_MODEL_SIZE", "tiny")
+    STT_DEBUG_LOGGING: bool = os.getenv("STT_DEBUG_LOGGING", "false").lower() in ("true", "1", "yes")
 
 def get_voice_for_language(lang: str, default_voice: str) -> str:
     if lang.startswith("es"):
@@ -126,4 +120,24 @@ def load_persisted_config():
         except Exception as e:
             print(f"[Config] Error loading persisted config: {e}")
 
+    # Environment variables MUST take precedence over persisted config files
+    if "PORT" in os.environ:
+        try:
+            config.PORT = int(os.environ["PORT"])
+        except ValueError:
+            pass
+    if "HOST" in os.environ:
+        config.HOST = os.environ["HOST"]
+    if "STT_ENABLED" in os.environ:
+        config.STT_ENABLED = os.environ["STT_ENABLED"].lower() in ("true", "1", "yes")
+    elif os.environ.get("RENDER") == "true":
+        config.STT_ENABLED = False
+    if "STT_MODEL_SIZE" in os.environ:
+        config.STT_MODEL_SIZE = os.environ["STT_MODEL_SIZE"]
+    if "GEMINI_API_KEY" in os.environ:
+        config.GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+    if "OPENAI_API_KEY" in os.environ:
+        config.OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+
 load_persisted_config()
+

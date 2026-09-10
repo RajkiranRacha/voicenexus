@@ -4,7 +4,13 @@ import math
 import time
 import asyncio
 from typing import Optional, Dict, Any
-from faster_whisper import WhisperModel
+try:
+    from faster_whisper import WhisperModel
+    HAS_FASTER_WHISPER = True
+except ImportError:
+    WhisperModel = None
+    HAS_FASTER_WHISPER = False
+
 from app.config import config
 
 _DEBUG_DUMP_DIR = os.environ.get("STT_DEBUG_DUMP_DIR", "")
@@ -15,21 +21,38 @@ class LocalWhisperSttService:
     """
     Server-side Speech-To-Text (VN-STT) using a locally-hosted Whisper model
     via faster-whisper/CTranslate2. Runs fully offline on CPU once the model
-    weights are cached, replacing the browser's opaque Web Speech API with
-    transcription we control and can attach confidence scores to.
+    weights are cached. The model is lazy-loaded on first audio transcription
+    rather than at startup, preventing OOM crashes on low-memory servers (e.g. Render 512MB).
     """
 
     def __init__(self):
-        self.available = False
-        self.model: Optional[WhisperModel] = None
+        self.available = bool(config.STT_ENABLED)
+        self.model: Optional[Any] = None
+        self._initialized = False
         if not config.STT_ENABLED:
-            print("[STT] Disabled via config; caller mic input unavailable, text/DTMF only.")
-            return
+            print("[STT] Server-side STT disabled via config (caller mic input uses browser Web Speech API).")
+
+    def _ensure_model(self) -> bool:
+        if self._initialized:
+            return self.available
+        self._initialized = True
+        if not config.STT_ENABLED:
+            self.available = False
+            return False
+        if not HAS_FASTER_WHISPER:
+            print("[STT] faster-whisper is not installed; STT disabled.")
+            self.available = False
+            return False
         try:
+            print(f"[STT] Lazy-loading Whisper model '{config.STT_MODEL_SIZE}' on CPU...")
             self.model = WhisperModel(config.STT_MODEL_SIZE, device="cpu", compute_type="int8")
             self.available = True
+            return True
         except Exception as e:
             print(f"[STT] Degraded mode: failed to load model '{config.STT_MODEL_SIZE}' ({e}).")
+            self.available = False
+            self.model = None
+            return False
 
     def _transcribe_sync(self, audio_bytes: bytes, language: Optional[str]) -> Dict[str, Any]:
         segments, info = self.model.transcribe(
@@ -95,7 +118,13 @@ class LocalWhisperSttService:
         return {"text": text, "confidence": round(confidence, 3), "language": getattr(info, "language", language)}
 
     async def transcribe(self, audio_bytes: bytes, language: Optional[str] = None) -> Dict[str, Any]:
-        if not self.available or not audio_bytes:
+        if not getattr(self, "available", False) or not audio_bytes:
+            return {"text": "", "confidence": 0.0, "language": language, "stt_ms": 0.0}
+        if not getattr(self, "_initialized", False):
+            await asyncio.to_thread(self._ensure_model)
+            if not getattr(self, "available", False) or not getattr(self, "model", None):
+                return {"text": "", "confidence": 0.0, "language": language, "stt_ms": 0.0}
+        if not getattr(self, "model", None):
             return {"text": "", "confidence": 0.0, "language": language, "stt_ms": 0.0}
         if _DEBUG_DUMP_DIR:
             global _debug_dump_counter

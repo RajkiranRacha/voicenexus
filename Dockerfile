@@ -15,11 +15,10 @@ RUN npm run build
 # Stage 2: Python Backend Runtime
 FROM python:3.12-slim AS runtime
 
-# System dependencies for audio handling and network
+# System dependencies for audio handling and healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -34,11 +33,15 @@ COPY backend/ ./backend/
 # Copy Built Static Assets from Stage 1 into the location expected by FastAPI
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Set Python Path & Environment
+# Set Python Path & Low-Memory Environment Defaults
 ENV PYTHONPATH=/app/backend
 ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
 ENV PORT=8000
+ENV STT_ENABLED=false
+ENV STT_MODEL_SIZE=tiny
+ENV MALLOC_ARENA_MAX=2
+ENV WEB_CONCURRENCY=1
 
 # Expose Port 8000 for HTTP and WebSockets
 EXPOSE 8000
