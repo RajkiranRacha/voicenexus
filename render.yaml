@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: voicenexus
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: HOST
+        value: 0.0.0.0
+      - key: STT_ENABLED
+        value: "false"
+      - key: STT_MODEL_SIZE
+        value: "tiny"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: WEB_CONCURRENCY
+        value: "1"
