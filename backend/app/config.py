@@ -10,8 +10,8 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "admin_config.json")
 
 class VoiceNexusConfig(BaseModel):
     # Server & Port
-    HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    HOST: str = os.getenv("HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", "8000"))
     DEBUG: bool = True
 
     # Brand Voice & Persona (VN-7)
