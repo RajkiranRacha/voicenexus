@@ -117,11 +117,12 @@ def save_persisted_config():
     os.makedirs(CONFIG_DIR, exist_ok=True)
     data = config.model_dump()
     # Ensure sensitive credentials and API keys are never persisted into tracked files
-    for secret_key in ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "TURN_CREDENTIAL"):
-        if secret_key in data:
-            data[secret_key] = ""
+    for k in list(data.keys()):
+        upper_k = k.upper()
+        if any(term in upper_k for term in ("KEY", "SECRET", "TOKEN", "CREDENTIAL", "PASSWORD")):
+            data[k] = ""
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
 def load_persisted_config():

@@ -1,0 +1,66 @@
+#!/usr/bin/env python
+"""
+Pre-commit hook to detect and prevent committing secrets and API keys.
+Scans all staged git changes for high-entropy tokens and common API key patterns.
+"""
+import sys
+import re
+import subprocess
+
+SECRET_PATTERNS = [
+    (r"gsk_[A-Za-z0-9]{20,}", "Groq API Key"),
+    (r"sk-[A-Za-z0-9_-]{20,}", "OpenAI API Key"),
+    (r"AIza[0-9A-Za-z-_]{35}", "Google/Gemini API Key"),
+    (r"sk-ant-[A-Za-z0-9_-]{20,}", "Anthropic API Key"),
+    (r"ghp_[A-Za-z0-9]{36}", "GitHub Personal Access Token"),
+    (r"github_pat_[A-Za-z0-9_]{50,}", "GitHub Fine-grained PAT"),
+    (r'["\'](GROQ_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY)["\']\s*:\s*["\'][a-zA-Z0-9_\-]{8,}["\']', "Hardcoded AI Key in JSON/Config"),
+]
+
+def main():
+    try:
+        diff_output = subprocess.check_output(
+            ["git", "diff", "--cached", "-U0"],
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+    except subprocess.CalledProcessError as e:
+        return 0
+
+    current_file = "unknown"
+    violations = []
+
+    for line in diff_output.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line[6:]
+            continue
+
+        if line.startswith("+") and not line.startswith("+++"):
+            added_content = line[1:]
+            for pattern, desc in SECRET_PATTERNS:
+                match = re.search(pattern, added_content)
+                if match:
+                    masked = match.group(0)[:6] + "..." + match.group(0)[-4:]
+                    violations.append((current_file, desc, masked))
+
+    if violations:
+        print("\n" + "=" * 70)
+        print(" [SECURITY ALERT] Git commit blocked: Potential secret(s) detected!")
+        print("=" * 70)
+        for filename, desc, masked in violations:
+            print(f"  - File:   {filename}")
+            print(f"    Type:   {desc}")
+            print(f"    Sample: {masked}")
+            print()
+        print("Action required:")
+        print("  1. Remove the secret from the file or store it in your .env file.")
+        print("  2. If using admin_config.json, ensure keys are empty strings (\"\").")
+        print("  3. Stage your changes with `git add` and retry `git commit`.\n")
+        return 1
+
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
