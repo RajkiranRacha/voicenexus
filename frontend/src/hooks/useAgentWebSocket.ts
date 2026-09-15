@@ -133,78 +133,114 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
       })
       .catch(() => {});
 
-    const ws = new WebSocket(wsUrl('/api/agent/ws'));
+    let isUnmounted = false;
+    let reconnectDelay = 1000;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
-    ws.onopen = () => setIsConnected(true);
+    const connectWs = () => {
+      if (isUnmounted) return;
 
-    ws.onmessage = async (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'NEW_ESCALATION') {
-          const payload: EscalationPayload = data.payload;
-          setEscalations(prev => {
-            const exists = prev.some(e => e.session_id === payload.session_id);
-            if (exists) return prev;
-            return [payload, ...prev];
-          });
-          setSelectedEscalation(prev => prev || payload);
-        } else if (data.type === 'CALL_ACCEPTED') {
-          if (data.session_id) {
-            setAcceptedCalls(prev => prev.includes(data.session_id) ? prev : [...prev, data.session_id]);
+      const ws = new WebSocket(wsUrl('/api/agent/ws'));
+
+      ws.onopen = () => {
+        setIsConnected(true);
+        reconnectDelay = 1000;
+
+        // Periodic heartbeat ping every 20s to prevent Render proxy timeout
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
+        heartbeatTimer = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'PING', timestamp: Date.now() }));
           }
-        } else if (data.type === 'TRANSCRIPT_STREAM') {
-          const { session_id, turn, metadata } = data;
-          setLiveCalls(prev => {
-            const existing = prev[session_id] || { turns: [], metadata };
-            return {
-              ...prev,
-              [session_id]: {
-                turns: [...existing.turns, turn],
-                metadata: metadata || existing.metadata
-              }
-            };
-          });
-          setSelectedLiveSessionId(prev => prev || session_id);
-        } else if (data.type === 'RTC_ANSWER') {
-          if (data.sdp) {
-            await webrtc.setRemoteAnswer(data.sdp);
-          }
-        } else if (data.type === 'RTC_ICE_CANDIDATE') {
-          if (data.candidate) await webrtc.addRemoteIceCandidate(data.candidate);
-        } else if (data.type === 'CALLER_LIVE_SPEECH') {
-          const sessId = data.session_id || activeCallSessionIdRef.current;
-          if (sessId && data.text) {
-            const callerTurn: DialogueTurn = {
-              turn_id: Date.now(),
-              speaker: 'caller',
-              text: data.text,
-              timestamp: new Date().toISOString()
-            };
-            setLiveCalls(prev => {
-              const existing = prev[sessId] || { turns: [] };
-              return { ...prev, [sessId]: { ...existing, turns: [...existing.turns, callerTurn] } };
+        }, 20000);
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'PONG') {
+            return;
+          } else if (data.type === 'NEW_ESCALATION') {
+            const payload: EscalationPayload = data.payload;
+            setEscalations(prev => {
+              const exists = prev.some(e => e.session_id === payload.session_id);
+              if (exists) return prev;
+              return [payload, ...prev];
             });
+            setSelectedEscalation(prev => prev || payload);
+          } else if (data.type === 'CALL_ACCEPTED') {
+            if (data.session_id) {
+              setAcceptedCalls(prev => prev.includes(data.session_id) ? prev : [...prev, data.session_id]);
+            }
+          } else if (data.type === 'TRANSCRIPT_STREAM') {
+            const { session_id, turn, metadata } = data;
+            setLiveCalls(prev => {
+              const existing = prev[session_id] || { turns: [], metadata };
+              return {
+                ...prev,
+                [session_id]: {
+                  turns: [...existing.turns, turn],
+                  metadata: metadata || existing.metadata
+                }
+              };
+            });
+            setSelectedLiveSessionId(prev => prev || session_id);
+          } else if (data.type === 'RTC_ANSWER') {
+            if (data.sdp) {
+              await webrtc.setRemoteAnswer(data.sdp);
+            }
+          } else if (data.type === 'RTC_ICE_CANDIDATE') {
+            if (data.candidate) await webrtc.addRemoteIceCandidate(data.candidate);
+          } else if (data.type === 'CALLER_LIVE_SPEECH') {
+            const sessId = data.session_id || activeCallSessionIdRef.current;
+            if (sessId && data.text) {
+              const callerTurn: DialogueTurn = {
+                turn_id: Date.now(),
+                speaker: 'caller',
+                text: data.text,
+                timestamp: new Date().toISOString()
+              };
+              setLiveCalls(prev => {
+                const existing = prev[sessId] || { turns: [] };
+                return { ...prev, [sessId]: { ...existing, turns: [...existing.turns, callerTurn] } };
+              });
+            }
+          } else if (data.type === 'CALL_ENDED') {
+            if (data.session_id) {
+              setEscalations(prev => prev.filter(e => e.session_id !== data.session_id));
+              setSelectedEscalation(prev => (prev && prev.session_id === data.session_id ? null : prev));
+            }
+            if (data.session_id === activeCallSessionIdRef.current) {
+              endActiveCall();
+            }
           }
-        } else if (data.type === 'CALL_ENDED') {
-          if (data.session_id) {
-            setEscalations(prev => prev.filter(e => e.session_id !== data.session_id));
-            setSelectedEscalation(prev => (prev && prev.session_id === data.session_id ? null : prev));
-          }
-          if (data.session_id === activeCallSessionIdRef.current) {
-            endActiveCall();
-          }
+        } catch (err) {
+          console.error('Agent WS message handling error:', err);
         }
-      } catch (err) {
-        console.error('Agent WS message handling error:', err);
-      }
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        if (heartbeatTimer) clearInterval(heartbeatTimer);
+        if (!isUnmounted) {
+          reconnectTimer = setTimeout(() => {
+            reconnectDelay = Math.min(reconnectDelay * 1.5, 10000);
+            connectWs();
+          }, reconnectDelay);
+        }
+      };
+
+      wsRef.current = ws;
     };
 
-    ws.onclose = () => setIsConnected(false);
-
-    wsRef.current = ws;
+    connectWs();
 
     return () => {
-      ws.close();
+      isUnmounted = true;
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (wsRef.current) wsRef.current.close();
       webrtc.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

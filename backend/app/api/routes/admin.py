@@ -199,3 +199,44 @@ def test_knowledge_query(req: KnowledgeTestRequest):
     if match:
         return {"matched": True, **match}
     return {"matched": False, "message": "No article matched with confidence >= 0.70. Would trigger standard flow or escalation."}
+
+
+# Subscriber & Test Customer Management
+from app.db.database import db
+
+class SubscriberUpsertRequest(BaseModel):
+    account_number: str
+    phone_number: str
+    customer_name: str
+    zip_code: str
+    address: Optional[str] = "100 Fiber Way"
+    plan_name: Optional[str] = "GigaFiber 500 Ultra"
+    monthly_rate: Optional[float] = 80.0
+    current_balance: Optional[float] = 0.0
+    due_date: Optional[str] = None
+    router_status: Optional[str] = "ONLINE"
+    has_active_outage: Optional[bool] = False
+
+@router.get("/subscribers")
+def get_all_subscribers():
+    """Returns all registered subscriber accounts in the database."""
+    return db.get_all_subscribers()
+
+@router.post("/subscribers")
+def upsert_subscriber(req: SubscriberUpsertRequest):
+    """Add or update a subscriber account, e.g. registering user's personal phone number."""
+    saved = db.upsert_subscriber(req.model_dump())
+    return {"success": True, "subscriber": saved}
+
+@router.delete("/subscribers/{account_number}")
+def delete_subscriber(account_number: str):
+    """Delete a subscriber account."""
+    success = db.delete_subscriber(account_number)
+    return {"success": success, "account_number": account_number}
+
+@router.post("/subscribers/seed")
+def reseed_subscribers():
+    """Reseeds standard test accounts."""
+    db._seed_default_data()
+    return {"success": True, "subscribers": db.get_all_subscribers()}
+

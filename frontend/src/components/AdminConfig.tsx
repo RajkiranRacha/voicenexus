@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
   Sliders, Mic, Building2, Save, Check, ShieldAlert, Volume2, Plus, Trash2, BookOpen,
-  Network, Server, Globe, Activity, ExternalLink, RefreshCw, AlertCircle, CheckCircle2
+  Network, Server, Globe, Activity, ExternalLink, RefreshCw, AlertCircle, CheckCircle2, Users
 } from 'lucide-react';
 import { useAdminConfig } from '../hooks/useAdminConfig';
 import { TelecomKbManager } from './TelecomKbManager';
+import { SubscriberManager } from './SubscriberManager';
 
 const NatTraversalConfig: React.FC<{ cfg: ReturnType<typeof useAdminConfig> }> = ({ cfg }) => {
   return (
@@ -226,7 +227,7 @@ const NatTraversalConfig: React.FC<{ cfg: ReturnType<typeof useAdminConfig> }> =
 };
 
 export const AdminConfig: React.FC = () => {
-  const [adminTab, setAdminTab] = useState<'VOICE_PROMPTS' | 'TELECOM_KB' | 'NAT_TRAVERSAL'>('VOICE_PROMPTS');
+  const [adminTab, setAdminTab] = useState<'VOICE_PROMPTS' | 'TELECOM_KB' | 'NAT_TRAVERSAL' | 'SUBSCRIBERS'>('VOICE_PROMPTS');
   const cfg = useAdminConfig();
   const [newPattern, setNewPattern] = useState<string>("");
   const [newReplace, setNewReplace] = useState<string>("");
@@ -239,7 +240,7 @@ export const AdminConfig: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      {/* Sub-tab Switcher: Voice/Prompts vs Knowledge Base vs WebRTC */}
+      {/* Sub-tab Switcher: Voice/Prompts vs Knowledge Base vs WebRTC vs Subscribers */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -253,6 +254,18 @@ export const AdminConfig: React.FC = () => {
           >
             <Sliders className="w-3.5 h-3.5" />
             <span>Brand Voice & Prompts</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminTab('SUBSCRIBERS')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-2 transition-all cursor-pointer ${
+              adminTab === 'SUBSCRIBERS'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Test Customers & My Number</span>
           </button>
           <button
             type="button"
@@ -301,7 +314,9 @@ export const AdminConfig: React.FC = () => {
         )}
       </div>
 
-      {adminTab === 'TELECOM_KB' ? (
+      {adminTab === 'SUBSCRIBERS' ? (
+        <SubscriberManager />
+      ) : adminTab === 'TELECOM_KB' ? (
         <TelecomKbManager />
       ) : adminTab === 'NAT_TRAVERSAL' ? (
         <NatTraversalConfig cfg={cfg} />

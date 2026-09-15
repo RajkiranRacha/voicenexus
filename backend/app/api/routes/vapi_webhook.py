@@ -63,7 +63,7 @@ async def vapi_webhook(request: Request):
     msg_type = message.get("type")
     call = message.get("call", {})
     call_id = call.get("id", "vapi-call")
-    session_id = f"vapi-{call_id[:10]}"
+    session_id = f"vapi-{call_id}"
     customer_ani = call.get("customer", {}).get("number", "+15550192834")
 
     # 1. TOOL CALLS: Vapi assistant wants to execute backend actions
@@ -157,10 +157,15 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
     """Executes VoiceNexus telecom business tools on behalf of Vapi."""
     logger.info(f"[Vapi Tool] Executing {name} with args: {args}")
 
+    from app.utils.speech_normalizer import clean_account_number, clean_zip_code
+
     if name == "lookup_account":
-        acc_num = args.get("account_number")
+        raw_acc = args.get("account_number")
         phone = args.get("phone_number") or caller_ani
-        zip_c = args.get("zip_code")
+        raw_zip = args.get("zip_code")
+
+        acc_num = clean_account_number(raw_acc) if raw_acc else None
+        zip_c = clean_zip_code(raw_zip) if raw_zip else None
 
         acc = None
         if acc_num:
@@ -176,14 +181,19 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
                 f"Current Balance: ${acc.current_balance:.2f} due on {acc.due_date}. "
                 f"Plan: {acc.plan_name}. Router Status: {acc.router_status}."
             )
-        return "Account not found with provided credentials. Please ask caller for account number or billing zip code."
+        return (
+            "Account not found for provided credentials. If you are an existing subscriber, "
+            "please provide your account number or billing zip code. If you are looking to set up "
+            "new fiber service, say 'new service' and I can check coverage in your area."
+        )
 
     elif name == "search_telecom_knowledge":
         query = args.get("query", "")
         return search_kb(query)
 
     elif name == "process_bill_payment":
-        acc_num = args.get("account_number")
+        raw_acc = args.get("account_number")
+        acc_num = clean_account_number(raw_acc) if raw_acc else None
         amount = float(args.get("amount", 0.0))
         if not acc_num or amount <= 0:
             return "Payment failed: Missing valid account number or amount."
@@ -194,12 +204,14 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         )
 
     elif name == "diagnose_and_reboot_router":
-        acc_num = args.get("account_number", "ACC-992014-X")
+        raw_acc = args.get("account_number", "ACC-992014-X")
+        acc_num = clean_account_number(raw_acc)
         res = bss_service.bounce_router(acc_num)
         return f"Router reset signal sent. Status: {res.get('status')}. Message: {res.get('message')}"
 
     elif name == "check_network_outage":
-        zip_c = args.get("zip_code", "94107")
+        raw_zip = args.get("zip_code", "94107")
+        zip_c = clean_zip_code(raw_zip) or "94107"
         outage = bss_service.check_outage_by_zip(zip_c)
         if outage:
             return (
@@ -213,25 +225,36 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         reason = args.get("reason", "Caller requested human representative")
         online = agent_hub.has_online_agents
 
+        # Look up profile context if available
+        matched_acc = bss_service.get_account_by_phone(caller_ani)
+        cust_name = matched_acc.customer_name if matched_acc else "Caller"
+        acc_id = matched_acc.account_number if matched_acc else "UNREGISTERED"
+
+        escalation_payload = EscalationPayload(
+            session_id=session_id,
+            ani=caller_ani,
+            customer_profile={
+                "customer_name": cust_name,
+                "account_number": acc_id,
+                "phone": caller_ani,
+                "source": "vapi_phone"
+            },
+            call_context={"caller_intent": "AGENT_ESCALATION", "provider": "vapi"},
+            resolution_summary={"failure_or_escalation_reason": reason},
+            recommended_agent_queue="tier2_human_specialist",
+            transcript_snippet=[{"speaker": "system", "text": f"Vapi call escalated: {reason}"}]
+        )
+        await agent_hub.broadcast_escalation(escalation_payload)
+
         if online:
-            escalation_payload = EscalationPayload(
-                session_id=session_id,
-                ani=caller_ani,
-                customer_profile={"phone": caller_ani, "source": "vapi_phone"},
-                call_context={"caller_intent": "AGENT_ESCALATION", "provider": "vapi"},
-                resolution_summary={"failure_or_escalation_reason": reason},
-                recommended_agent_queue="tier2_human_specialist",
-                transcript_snippet=[{"speaker": "system", "text": f"Vapi call escalated: {reason}"}]
-            )
-            await agent_hub.broadcast_escalation(escalation_payload)
             return (
                 "Transferring call now. I have alerted our care specialist on the desktop portal. "
                 "They have your account details and are answering right now."
             )
         else:
             return (
-                "All human care specialists are currently away from the web portal. "
-                "I can help resolve your billing, reboot your router, or answer telecom questions right now."
+                "I have prioritized your request and alerted our care specialist on the desktop portal. "
+                "They have received your account details and live transcript."
             )
 
     return f"Tool {name} executed successfully."
