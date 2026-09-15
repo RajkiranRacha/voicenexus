@@ -11,6 +11,7 @@ except ImportError:
     WhisperModel = None
     HAS_FASTER_WHISPER = False
 
+import httpx
 from app.config import config
 
 _DEBUG_DUMP_DIR = os.environ.get("STT_DEBUG_DUMP_DIR", "")
@@ -19,17 +20,16 @@ _debug_dump_counter = 0
 
 class LocalWhisperSttService:
     """
-    Server-side Speech-To-Text (VN-STT) using a locally-hosted Whisper model
-    via faster-whisper/CTranslate2. Runs fully offline on CPU once the model
-    weights are cached. The model is lazy-loaded on first audio transcription
-    rather than at startup, preventing OOM crashes on low-memory servers (e.g. Render 512MB).
+    Speech-To-Text (VN-STT) service supporting both ultra-fast cloud transcription
+    via Groq Whisper API (whisper-large-v3-turbo, ~120ms) and offline local CPU
+    transcription via faster-whisper.
     """
 
     def __init__(self):
-        self.available = bool(config.STT_ENABLED)
+        self.available = bool(config.STT_ENABLED or config.GROQ_API_KEY)
         self.model: Optional[Any] = None
         self._initialized = False
-        if not config.STT_ENABLED:
+        if not self.available:
             print("[STT] Server-side STT disabled via config (caller mic input uses browser Web Speech API).")
 
     def _ensure_model(self) -> bool:
@@ -117,9 +117,43 @@ class LocalWhisperSttService:
         confidence = max(0.0, min(1.0, math.exp(sum(logprobs) / len(logprobs)))) if logprobs else 0.0
         return {"text": text, "confidence": round(confidence, 3), "language": getattr(info, "language", language)}
 
+    async def _transcribe_groq(self, audio_bytes: bytes, language: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Ultra-fast cloud transcription via Groq Whisper API (~120ms)."""
+        if not config.GROQ_API_KEY:
+            return None
+        start = time.perf_counter()
+        try:
+            lang_code = language[:2].lower() if language else "en"
+            files = {"file": ("audio.webm", audio_bytes, "audio/webm")}
+            data = {"model": config.GROQ_WHISPER_MODEL or "whisper-large-v3-turbo", "language": lang_code}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(
+                    "https://api.groq.com/openai/v1/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"},
+                    files=files,
+                    data=data
+                )
+                if res.status_code == 200:
+                    text = res.json().get("text", "").strip()
+                    ms = round((time.perf_counter() - start) * 1000, 1)
+                    return {"text": text, "confidence": 0.95, "language": language, "stt_ms": ms}
+                else:
+                    print(f"[STT] Groq Whisper error ({res.status_code}): {res.text}")
+        except Exception as e:
+            print(f"[STT] Groq Whisper exception: {e}")
+        return None
+
     async def transcribe(self, audio_bytes: bytes, language: Optional[str] = None) -> Dict[str, Any]:
         if not getattr(self, "available", False) or not audio_bytes:
             return {"text": "", "confidence": 0.0, "language": language, "stt_ms": 0.0}
+
+        # 1. Try ultra-fast Groq cloud Whisper first if API key is present
+        if config.GROQ_API_KEY:
+            groq_res = await self._transcribe_groq(audio_bytes, language)
+            if groq_res and groq_res.get("text"):
+                return groq_res
+
+        # 2. Fall back to local CPU faster-whisper
         if not getattr(self, "_initialized", False):
             await asyncio.to_thread(self._ensure_model)
             if not getattr(self, "available", False) or not getattr(self, "model", None):

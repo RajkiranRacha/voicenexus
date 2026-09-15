@@ -72,8 +72,29 @@ docker-compose down
    ```
 4. Point DNS to your server IP (e.g. `care.yourtelco.com`). Configure reverse proxy (Nginx or Caddy) with SSL certificate (`https` and `wss`).
 
+### Option B: Render Deployment (Zero-Config Docker)
+1. Push repository to GitHub and create a new **Web Service** on [Render.com](https://render.com).
+2. Select **Docker** runtime (uses the root `Dockerfile`).
+3. Set environment variables on Render:
+   - `PORT`: `8000`
+   - `HOST`: `0.0.0.0`
+   - `STT_ENABLED`: `false` (keeps memory below 512MB for free tier)
+   - *(Optional for Symmetric NAT / mobile data traversal)*:
+     - `TURN_SERVER_URL`: `turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443`
+     - `TURN_USERNAME`: `<your-metered-username>`
+     - `TURN_CREDENTIAL`: `<your-metered-password>`
+     *(Free 50GB/month without credit card from [Metered.ca](https://www.metered.ca))*
+
 > [!IMPORTANT]
-> **Microphone Permissions (HTTPS)**: Modern web browsers (Chrome, Safari, Edge) require **HTTPS** (or `localhost`) to grant microphone access for speech recognition and WebRTC voice calls. When hosting over a public domain or IP, ensure SSL/TLS is enabled via reverse proxy.
+> **WebRTC Cross-Network Calling & Symmetric NAT**:
+> When testing locally on `localhost`, WebRTC uses `host` candidates without needing external NAT traversal. When deployed to Render and testing across different networks (e.g. mobile 4G/5G, corporate Wi-Fi, or home routers with Symmetric NAT), STUN alone cannot connect direct UDP packets between peers.
+> 
+> You can enter your free TURN credentials either:
+> 1. In your **Render Dashboard > Environment Variables** (`TURN_SERVER_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL`), OR
+> 2. Directly in the running web app at `/admin` under the **WebRTC & NAT Traversal (STUN / TURN)** tab and click **Save**.
+
+> [!IMPORTANT]
+> **Microphone Permissions (HTTPS)**: Modern web browsers (Chrome, Safari, Edge) require **HTTPS** (or `localhost`) to grant microphone access for speech recognition and WebRTC voice calls. Render provides automatic HTTPS for all services (`https://<app>.onrender.com`).
 
 ---
 

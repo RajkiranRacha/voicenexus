@@ -30,12 +30,22 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
   const endCallRef = useRef<() => void>(() => {});
   const autoCloseTimerRef = useRef<number | null>(null);
 
-  // Sync the pre-call language badge/speech-recognition default from the
-  // operator's configured language before any call has started.
+  const [iceServers, setIceServers] = useState<RTCIceServer[] | undefined>(undefined);
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(false);
+
+  // Sync pre-call language and dynamic WebRTC ICE configuration (STUN/TURN)
   useEffect(() => {
     apiGet<{ language?: string }>('/api/admin/config')
       .then((data) => {
         if (data && data.language) setCallLanguage(data.language);
+      })
+      .catch(() => {});
+
+    apiGet<{ iceServers?: RTCIceServer[] }>('/api/rtc-config')
+      .then((data) => {
+        if (data && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+          setIceServers(data.iceServers);
+        }
       })
       .catch(() => {});
   }, []);
@@ -51,11 +61,28 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
   const onRemoteStream = useCallback((stream: MediaStream) => {
     if (agentAudioRef.current) {
       agentAudioRef.current.srcObject = stream;
-      agentAudioRef.current.play().catch(() => {});
+      agentAudioRef.current.play()
+        .then(() => {
+          setIsAutoplayBlocked(false);
+        })
+        .catch((err) => {
+          console.warn("[Caller] Audio autoplay blocked:", err);
+          setIsAutoplayBlocked(true);
+        });
     }
   }, [agentAudioRef]);
 
-  const webrtc = useWebRTCPeer({ onIceCandidate: sendIceCandidate, onRemoteStream });
+  const unlockAudio = useCallback(() => {
+    if (agentAudioRef.current) {
+      agentAudioRef.current.play()
+        .then(() => {
+          setIsAutoplayBlocked(false);
+        })
+        .catch(() => {});
+    }
+  }, [agentAudioRef]);
+
+  const webrtc = useWebRTCPeer({ onIceCandidate: sendIceCandidate, onRemoteStream, iceServers });
 
   const handleBargeIn = useCallback(() => {
     stopPlayback();
@@ -245,6 +272,10 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     isCallerMicActive: webrtc.isMicActive,
     isCallerMuted: webrtc.isMuted,
     toggleCallerMute: webrtc.toggleMute,
+    webrtcConnectionState: webrtc.connectionState,
+    iceConnectionState: webrtc.iceConnectionState,
+    isAutoplayBlocked,
+    unlockAudio,
     startCall, endCall, sendUtterance, sendDtmf, handleBargeIn,
   };
 }

@@ -6,6 +6,8 @@ from app.models.schemas import (
     CallState, DialogueTurn, LatencyMetrics, EscalationPayload
 )
 from app.engine.state_machine import CallSessionStateMachine
+from app.engine.llm_agent import LLMAgent
+from app.engine.intent_classifier import intent_classifier, IntentEnum
 from app.services.tts import tts_service
 from app.services.agent_hub import agent_hub
 from app.services.telemetry import telemetry_service
@@ -22,6 +24,9 @@ class DialogueOrchestrator:
         self.session_id = session_id
         self.ani = ani
         self.fsm = CallSessionStateMachine(session_id, ani)
+        self.llm_agent: Optional[LLMAgent] = None
+        if config.GROQ_API_KEY:
+            self.llm_agent = LLMAgent(session_id, ani, self.fsm.account)
         self.is_interrupted = False
         self.turn_counter = 0
         telemetry_service.record_call_start(session_id, ani)
@@ -35,7 +40,8 @@ class DialogueOrchestrator:
         via DTMF/text even if voice audio could not be generated this turn.
         """
         try:
-            voice_override = get_voice_for_language(self.fsm.language, config.DEFAULT_VOICE)
+            current_lang = self.llm_agent.language if self.llm_agent else self.fsm.language
+            voice_override = get_voice_for_language(current_lang, config.DEFAULT_VOICE)
             return await tts_service.synthesize_to_base64(
                 text, voice_override=voice_override, rate_override=config.VOICE_RATE
             )
@@ -47,7 +53,15 @@ class DialogueOrchestrator:
         """
         Executes initial greeting, ANI lookup, and synthesis of welcome prompt.
         """
-        greeting_text = self.fsm.get_greeting()
+        if self.llm_agent:
+            greeting_text = self.llm_agent.get_greeting()
+            current_state = CallState.GREETING.value
+            current_lang = self.llm_agent.language
+        else:
+            greeting_text = self.fsm.get_greeting()
+            current_state = self.fsm.state.value
+            current_lang = self.fsm.language
+
         self.turn_counter += 1
         
         # Measure TTS synthesis time
@@ -60,7 +74,7 @@ class DialogueOrchestrator:
             speaker="ai",
             text=greeting_text,
             latency=LatencyMetrics(tts_ms=tts_ms, total_turn_ms=tts_ms),
-            state=self.fsm.state.value
+            state=current_state
         )
         self.fsm.turns.append(ai_turn)
 
@@ -69,8 +83,8 @@ class DialogueOrchestrator:
             "ani": self.ani,
             "customer_name": self.fsm.account.customer_name if self.fsm.account else "Unregistered Caller",
             "account_number": self.fsm.account.account_number if self.fsm.account else "UNREGISTERED",
-            "state": self.fsm.state.value,
-            "language": self.fsm.language
+            "state": current_state,
+            "language": current_lang
         }
         await agent_hub.broadcast_transcript_turn(self.session_id, ai_turn.model_dump(), metadata)
 
@@ -81,8 +95,8 @@ class DialogueOrchestrator:
             "turn": ai_turn.model_dump(),
             "audio_base64": audio_base64,
             "audio_degraded": audio_base64 is None,
-            "state": self.fsm.state.value,
-            "language": self.fsm.language
+            "state": current_state,
+            "language": current_lang
         }
 
     async def process_caller_utterance(
@@ -117,9 +131,31 @@ class DialogueOrchestrator:
         # Broadcast turn to Live Agent Overlay (VN-10)
         await agent_hub.broadcast_transcript_turn(self.session_id, caller_turn.model_dump(), metadata)
 
-        # 2. Process through Deterministic State Machine (NLU)
+        # 2. Process through LLM Agent (Groq) or Deterministic State Machine (NLU)
         nlu_start = time.perf_counter()
-        response_text, new_state, escalation_payload = self.fsm.process_turn(caller_text)
+        if self.llm_agent:
+            response_text, escalation_payload, updated_account = await self.llm_agent.process_turn(caller_text)
+            if updated_account:
+                self.fsm.account = updated_account
+            if escalation_payload:
+                new_state = CallState.ESCALATING_TO_AGENT
+            else:
+                intent, _, _ = intent_classifier.classify(caller_text)
+                lowered = caller_text.lower()
+                if intent == IntentEnum.CALL_WRAPUP or (
+                    intent == IntentEnum.GRATITUDE and any(p in lowered for p in [
+                        "good", "fine", "nothing", "that's all", "thats all", "all set",
+                        "no need", "bye", "goodbye", "adios", "alvida", "see you"
+                    ])
+                ):
+                    new_state = CallState.RESOLVED_CONTAINED
+                    self.fsm.should_close_call = True
+                else:
+                    new_state = CallState.SUBFLOW_EXECUTION
+            current_lang = self.llm_agent.language
+        else:
+            response_text, new_state, escalation_payload = self.fsm.process_turn(caller_text)
+            current_lang = self.fsm.language
         nlu_ms = round((time.perf_counter() - nlu_start) * 1000, 1)
 
         # 3. Generate Speech Audio via Neural TTS
@@ -146,7 +182,7 @@ class DialogueOrchestrator:
         self.fsm.turns.append(ai_turn)
 
         metadata["state"] = new_state.value
-        metadata["language"] = self.fsm.language
+        metadata["language"] = current_lang
         if self.fsm.account:
             metadata["customer_name"] = self.fsm.account.customer_name
             metadata["account_number"] = self.fsm.account.account_number
@@ -169,7 +205,7 @@ class DialogueOrchestrator:
             "audio_base64": audio_base64,
             "audio_degraded": audio_base64 is None,
             "state": new_state.value,
-            "language": self.fsm.language,
+            "language": current_lang,
             "caller_account": self.fsm.account.model_dump() if self.fsm.account else None,
             "escalated": bool(escalation_payload),
             "escalation_payload": escalation_payload.model_dump() if escalation_payload else None,

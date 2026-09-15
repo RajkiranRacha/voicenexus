@@ -43,6 +43,11 @@ class AgentHub:
         if websocket in self._active_connections:
             self._active_connections.remove(websocket)
 
+    @property
+    def has_online_agents(self) -> bool:
+        """Returns True if at least one human care specialist is online in the web app."""
+        return len(self._active_connections) > 0
+
     async def broadcast_escalation(self, payload: EscalationPayload):
         """
         Deliver structured context to all logged-in agent desktops with zero-latency screen-pop.

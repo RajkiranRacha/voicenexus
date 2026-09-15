@@ -74,7 +74,7 @@ export const PhoneSimulator: React.FC = () => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
       {/* Audio element for playing live agent voice */}
-      <audio ref={agentAudioRef} autoPlay />
+      <audio ref={agentAudioRef} autoPlay playsInline />
 
       {/* Left Column: Phone Console & Audio Telemetry */}
       <div className="lg:col-span-4 space-y-4">
@@ -321,13 +321,35 @@ export const PhoneSimulator: React.FC = () => {
                     {call.connectedAgent.name}
                   </span>
                 </div>
-                <div className="text-[11px] text-emerald-400/80">
-                  Two-way voice connection active · You can speak directly to the specialist
+                <div className="text-[11px] text-emerald-400/80 flex items-center space-x-2">
+                  <span>Two-way voice connection active · You can speak directly to the specialist</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] border ${
+                    call.webrtcConnectionState === 'connected' ? 'bg-emerald-900/60 text-emerald-300 border-emerald-700' :
+                    call.webrtcConnectionState === 'connecting' ? 'bg-amber-900/60 text-amber-300 border-amber-700 animate-pulse' :
+                    call.webrtcConnectionState === 'failed' ? 'bg-rose-900/60 text-rose-300 border-rose-700' :
+                    'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
+                    {call.webrtcConnectionState === 'connected' ? 'P2P Audio: Live' :
+                     call.webrtcConnectionState === 'connecting' ? 'Connecting Audio...' :
+                     call.webrtcConnectionState === 'failed' ? 'Audio Traversal Failed' : 'Audio: Standby'}
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center space-x-2">
+              {call.isAutoplayBlocked && (
+                <button
+                  type="button"
+                  onClick={call.unlockAudio}
+                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-[11px] flex items-center space-x-1 animate-bounce transition-all cursor-pointer shadow-md shadow-amber-950/40"
+                  title="Click to allow audio playback from agent"
+                >
+                  <Volume2 className="w-3 h-3" />
+                  <span>Tap to Hear Agent</span>
+                </button>
+              )}
+
               <span className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center space-x-1.5 ${
                 call.isCallerMicActive
                   ? (call.isCallerMuted ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-emerald-900/80 text-emerald-200 border-emerald-700')

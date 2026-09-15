@@ -88,6 +88,11 @@ export interface AdminConfigData {
   voice_pitch: string;
   language: string;
   pronunciation_overrides: Record<string, string>;
+  turn_server_url?: string;
+  turn_username?: string;
+  turn_credential?: string;
+  ice_servers_json?: string;
+  effective_ice_servers?: Array<{ urls: string | string[]; username?: string; credential?: string }>;
 }
 
 export interface ActiveCallState {

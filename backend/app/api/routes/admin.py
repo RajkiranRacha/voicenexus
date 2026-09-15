@@ -2,7 +2,7 @@ import re
 from typing import Optional, Dict
 from fastapi import APIRouter
 from pydantic import BaseModel, field_validator
-from app.config import config, save_persisted_config
+from app.config import config, save_persisted_config, get_ice_servers
 from app.services.tts import tts_service
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Config"])
@@ -41,6 +41,13 @@ class TenantPromptUpdate(BaseModel):
     pronunciation_overrides: Optional[Dict[str, str]] = None
 
 
+class RtcConfigUpdate(BaseModel):
+    turn_server_url: str = ""
+    turn_username: str = ""
+    turn_credential: str = ""
+    ice_servers_json: str = ""
+
+
 @router.get("/config")
 def get_admin_config():
     return {
@@ -59,7 +66,36 @@ def get_admin_config():
         "voice_rate": config.VOICE_RATE,
         "voice_pitch": config.VOICE_PITCH,
         "language": config.LANGUAGE,
-        "pronunciation_overrides": config.PRONUNCIATION_OVERRIDES
+        "pronunciation_overrides": config.PRONUNCIATION_OVERRIDES,
+        "turn_server_url": config.TURN_SERVER_URL,
+        "turn_username": config.TURN_USERNAME,
+        "turn_credential": config.TURN_CREDENTIAL,
+        "ice_servers_json": config.ICE_SERVERS_JSON,
+        "effective_ice_servers": get_ice_servers(),
+    }
+
+
+@router.get("/rtc")
+def get_admin_rtc_config():
+    return {
+        "turn_server_url": config.TURN_SERVER_URL,
+        "turn_username": config.TURN_USERNAME,
+        "turn_credential": config.TURN_CREDENTIAL,
+        "ice_servers_json": config.ICE_SERVERS_JSON,
+        "effective_ice_servers": get_ice_servers(),
+    }
+
+
+@router.post("/rtc")
+def update_rtc_config(req: RtcConfigUpdate):
+    config.TURN_SERVER_URL = req.turn_server_url
+    config.TURN_USERNAME = req.turn_username
+    config.TURN_CREDENTIAL = req.turn_credential
+    config.ICE_SERVERS_JSON = req.ice_servers_json
+    save_persisted_config()
+    return {
+        "success": True,
+        "effective_ice_servers": get_ice_servers(),
     }
 
 

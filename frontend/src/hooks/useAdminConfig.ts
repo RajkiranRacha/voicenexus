@@ -54,7 +54,19 @@ export function useAdminConfig() {
     { pattern: "\\bMbps\\b", replace: "megabits per second" },
     { pattern: "\\bSSID\\b", replace: "Wi-Fi network name" }
   ]);
+  const [turnServerUrl, setTurnServerUrl] = useState<string>("");
+  const [turnUsername, setTurnUsername] = useState<string>("");
+  const [turnCredential, setTurnCredential] = useState<string>("");
+  const [iceServersJson, setIceServersJson] = useState<string>("");
+  const [effectiveIceServers, setEffectiveIceServers] = useState<any[]>([]);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [rtcSaveSuccess, setRtcSaveSuccess] = useState<boolean>(false);
+  const [iceTestStatus, setIceTestStatus] = useState<{
+    testing: boolean;
+    success?: boolean;
+    message?: string;
+    details?: string[];
+  }>({ testing: false });
 
   useEffect(() => {
 
@@ -84,6 +96,11 @@ export function useAdminConfig() {
             }));
             setPronunciations(list);
           }
+          if (data.turn_server_url !== undefined) setTurnServerUrl(data.turn_server_url);
+          if (data.turn_username !== undefined) setTurnUsername(data.turn_username);
+          if (data.turn_credential !== undefined) setTurnCredential(data.turn_credential);
+          if (data.ice_servers_json !== undefined) setIceServersJson(data.ice_servers_json);
+          if (data.effective_ice_servers) setEffectiveIceServers(data.effective_ice_servers);
         }
       })
       .catch(() => {});
@@ -147,6 +164,130 @@ export function useAdminConfig() {
     selectedVoice, speechRate, language, pronunciations
   ]);
 
+  const saveRtcSettings = useCallback(async () => {
+    try {
+      const res = await apiPost<{ success: boolean; effective_ice_servers?: any[] }>('/api/admin/rtc', {
+        turn_server_url: turnServerUrl,
+        turn_username: turnUsername,
+        turn_credential: turnCredential,
+        ice_servers_json: iceServersJson
+      });
+      if (res.success) {
+        if (res.effective_ice_servers) {
+          setEffectiveIceServers(res.effective_ice_servers);
+        }
+        setRtcSaveSuccess(true);
+        setTimeout(() => setRtcSaveSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error("Failed to save RTC config:", err);
+    }
+  }, [turnServerUrl, turnUsername, turnCredential, iceServersJson]);
+
+  const testIceGathering = useCallback(async () => {
+    setIceTestStatus({ testing: true });
+    const collectedTypes = new Set<string>();
+    const details: string[] = [];
+
+    try {
+      let testServers: RTCIceServer[] = [];
+      if (iceServersJson.trim()) {
+        try {
+          testServers = JSON.parse(iceServersJson);
+        } catch {
+          setIceTestStatus({
+            testing: false,
+            success: false,
+            message: 'Invalid ICE Servers JSON syntax.',
+            details: ['Please ensure valid JSON array matching [{ "urls": "..." }] format.']
+          });
+          return;
+        }
+      } else {
+        testServers = [
+          {
+            urls: [
+              'stun:stun.l.google.com:19302',
+              'stun:stun1.l.google.com:19302',
+              'stun:stun.cloudflare.com:3478'
+            ]
+          }
+        ];
+        if (turnServerUrl.trim()) {
+          const entry: any = {
+            urls: turnServerUrl.split(',').map(u => u.trim()).filter(Boolean)
+          };
+          if (turnUsername.trim()) entry.username = turnUsername.trim();
+          if (turnCredential.trim()) entry.credential = turnCredential.trim();
+          testServers.push(entry);
+        }
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers: testServers,
+        iceCandidatePoolSize: 1
+      });
+
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => resolve(), 5000);
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            const cand = event.candidate;
+            const type = cand.type || 'unknown';
+            collectedTypes.add(type);
+            details.push(`[${type.toUpperCase()}] ${cand.protocol} candidate: ${cand.candidate.slice(0, 40)}...`);
+          } else {
+            clearTimeout(timer);
+            resolve();
+          }
+        };
+      });
+
+      pc.close();
+
+      const hasRelay = collectedTypes.has('relay');
+      const hasSrflx = collectedTypes.has('srflx');
+
+      if (hasRelay) {
+        setIceTestStatus({
+          testing: false,
+          success: true,
+          message: 'TURN relay verified successfully! Relay candidates gathered for cross-network connectivity.',
+          details
+        });
+      } else if (hasSrflx) {
+        setIceTestStatus({
+          testing: false,
+          success: !turnServerUrl.trim(),
+          message: turnServerUrl.trim()
+            ? 'STUN succeeded, but TURN relay candidate was not gathered. Check TURN credentials and ports.'
+            : 'STUN verified (public IP discovered). Note: Symmetric NAT or mobile networks still require TURN.',
+          details
+        });
+      } else {
+        setIceTestStatus({
+          testing: false,
+          success: false,
+          message: 'Failed to gather public candidates. Firewall or ISP may be blocking UDP packets.',
+          details
+        });
+      }
+    } catch (err: any) {
+      setIceTestStatus({
+        testing: false,
+        success: false,
+        message: `ICE Gathering test failed: ${err?.message || err}`,
+        details
+      });
+    }
+  }, [turnServerUrl, turnUsername, turnCredential, iceServersJson]);
+
   return {
     operatorName, setOperatorName,
     greetingPrompt, setGreetingPrompt,
@@ -161,6 +302,13 @@ export function useAdminConfig() {
     speechRate, setSpeechRate,
     language, setLanguage,
     pronunciations, addPronunciation, removePronunciation,
+    turnServerUrl, setTurnServerUrl,
+    turnUsername, setTurnUsername,
+    turnCredential, setTurnCredential,
+    iceServersJson, setIceServersJson,
+    effectiveIceServers,
     savedSuccess, saveSettings,
+    rtcSaveSuccess, saveRtcSettings,
+    iceTestStatus, testIceGathering,
   };
 }

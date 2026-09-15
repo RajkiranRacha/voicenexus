@@ -79,6 +79,15 @@ class BssOssService:
         for p, acc in self._accounts.items():
             if p.endswith(cleaned[-10:]):
                 return acc
+        try:
+            from app.db.database import db
+            row = db.get_subscriber_by_phone(phone_number)
+            if row:
+                acc = SubscriberAccount(**row)
+                self._accounts[acc.phone_number] = acc
+                return acc
+        except Exception:
+            pass
         return None
 
     def get_account_by_number(self, account_number: str) -> Optional[SubscriberAccount]:
@@ -89,6 +98,15 @@ class BssOssService:
                 return acc
             if digits and len(digits) >= 4 and digits in "".join(filter(str.isdigit, acc.account_number)):
                 return acc
+        try:
+            from app.db.database import db
+            row = db.get_subscriber_by_account(account_number)
+            if row:
+                acc = SubscriberAccount(**row)
+                self._accounts[acc.phone_number] = acc
+                return acc
+        except Exception:
+            pass
         return None
 
     def get_account_by_zip(self, zip_code: str) -> Optional[SubscriberAccount]:
@@ -147,6 +165,11 @@ class BssOssService:
         tx_id = f"TXN-{uuid.uuid4().hex[:8].upper()}"
         if acc:
             acc.current_balance = max(0.0, round(acc.current_balance - amount, 2))
+            try:
+                from app.db.database import db
+                db.update_balance(acc.account_number, acc.current_balance)
+            except Exception:
+                pass
 
         record = {
             "success": True,
@@ -199,8 +222,13 @@ class BssOssService:
 
     def bounce_router(self, account_number: str) -> Dict[str, Any]:
         acc = self.get_account_by_number(account_number)
-        if acc and acc.router_status == "DEGRADED":
+        if acc:
             acc.router_status = "ONLINE"
+            try:
+                from app.db.database import db
+                db.update_router_status(acc.account_number, "ONLINE")
+            except Exception:
+                pass
             return {
                 "success": True,
                 "status": "ONLINE_RESTORED",
