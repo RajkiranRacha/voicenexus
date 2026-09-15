@@ -115,8 +115,14 @@ config = VoiceNexusConfig()
 
 def save_persisted_config():
     os.makedirs(CONFIG_DIR, exist_ok=True)
+    data = config.model_dump()
+    # Ensure sensitive credentials and API keys are never persisted into tracked files
+    for secret_key in ("GROQ_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "TURN_CREDENTIAL"):
+        if secret_key in data:
+            data[secret_key] = ""
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        f.write(config.model_dump_json(indent=2))
+        json.dump(data, f, indent=2)
+        f.write("\n")
 
 def load_persisted_config():
     if os.path.exists(CONFIG_FILE):

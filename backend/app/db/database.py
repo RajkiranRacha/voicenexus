@@ -77,14 +77,76 @@ class TelecomDatabase:
                 subscribers = [
                     ("ACC-992014-X", "+15550192834", "Jordan Rivera", "94107", "450 Townsend St, San Francisco, CA", "GigaFiber 500 Ultra", 80.0, 142.5, (datetime.now() + timedelta(days=4)).strftime("%Y-%m-%d"), "4242", "jordan.rivera@example.com", "UNAUTHENTICATED", 0, "ONLINE"),
                     ("ACC-881230-B", "+15550148821", "Elena Vance", "98101", "1201 3rd Ave, Seattle, WA", "FiberConnect 300", 65.0, 0.0, (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d"), "1188", "elena.vance@example.com", "UNAUTHENTICATED", 1, "OFFLINE"),
-                    ("ACC-773419-C", "+15550173399", "Marcus Brody", "78701", "200 Congress Ave, Austin, TX", "Gigabit Pro 1000", 110.0, 220.0, (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"), "9901", "marcus.brody@example.com", "UNAUTHENTICATED", 0, "DEGRADED")
+                    ("ACC-773419-C", "+15550173399", "Marcus Brody", "78701", "200 Congress Ave, Austin, TX", "Gigabit Pro 1000", 110.0, 220.0, (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"), "9901", "marcus.brody@example.com", "UNAUTHENTICATED", 0, "DEGRADED"),
+                    ("ACC-1001", "+15550101001", "Sam Taylor", "90210", "100 Beverly Blvd, Beverly Hills, CA", "GigaFiber 500 Ultra", 80.0, 45.0, (datetime.now() + timedelta(days=12)).strftime("%Y-%m-%d"), "1001", "sam.taylor@example.com", "UNAUTHENTICATED", 0, "ONLINE"),
+                    ("ACC-2002", "+15550102002", "Alex Morgan", "10001", "350 5th Ave, New York, NY", "FiberConnect 1000", 95.0, 0.0, (datetime.now() + timedelta(days=18)).strftime("%Y-%m-%d"), "2002", "alex.morgan@example.com", "UNAUTHENTICATED", 0, "ONLINE")
                 ]
-                cursor.executemany("INSERT INTO subscribers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", subscribers)
+                cursor.executemany("INSERT OR REPLACE INTO subscribers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", subscribers)
 
             cursor.execute("SELECT COUNT(*) FROM outages")
             if cursor.fetchone()[0] == 0:
-                cursor.execute("INSERT INTO outages VALUES (?, ?, ?, ?, ?, ?)", ("98101", "Downtown Seattle Metro", 1420, "CREW_DISPATCHED", "2 hours from now", "Fiber trunk line damage due to municipal utility work"))
+                cursor.execute("INSERT OR REPLACE INTO outages VALUES (?, ?, ?, ?, ?, ?)", ("98101", "Downtown Seattle Metro", 1420, "CREW_DISPATCHED", "2 hours from now", "Fiber trunk line damage due to municipal utility work"))
             conn.commit()
+
+    def get_all_subscribers(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM subscribers ORDER BY customer_name ASC")
+            results = []
+            for r in cursor.fetchall():
+                d = dict(r)
+                d["has_active_outage"] = bool(d["has_active_outage"])
+                results.append(d)
+            return results
+
+    def upsert_subscriber(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO subscribers (
+                    account_number, phone_number, customer_name, zip_code, address,
+                    plan_name, monthly_rate, current_balance, due_date, payment_card_last4,
+                    email, auth_status, has_active_outage, router_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_number) DO UPDATE SET
+                    phone_number = excluded.phone_number,
+                    customer_name = excluded.customer_name,
+                    zip_code = excluded.zip_code,
+                    address = excluded.address,
+                    plan_name = excluded.plan_name,
+                    monthly_rate = excluded.monthly_rate,
+                    current_balance = excluded.current_balance,
+                    due_date = excluded.due_date,
+                    payment_card_last4 = excluded.payment_card_last4,
+                    email = excluded.email,
+                    auth_status = excluded.auth_status,
+                    has_active_outage = excluded.has_active_outage,
+                    router_status = excluded.router_status
+            """, (
+                (data.get("account_number") or "").strip().upper(),
+                (data.get("phone_number") or "").strip(),
+                data.get("customer_name") or "Subscriber",
+                (data.get("zip_code") or "94107").strip(),
+                data.get("address") or "100 Fiber Way",
+                data.get("plan_name") or "GigaFiber 500 Ultra",
+                float(data.get("monthly_rate") or 80.0),
+                float(data.get("current_balance") or 0.0),
+                data.get("due_date") or (datetime.now() + timedelta(days=15)).strftime("%Y-%m-%d"),
+                data.get("payment_card_last4") or "4242",
+                data.get("email") or "customer@example.com",
+                data.get("auth_status") or "UNAUTHENTICATED",
+                1 if data.get("has_active_outage") else 0,
+                data.get("router_status") or "ONLINE"
+            ))
+            conn.commit()
+            return self.get_subscriber_by_account(data.get("account_number", "").strip().upper()) or {}
+
+    def delete_subscriber(self, account_number: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM subscribers WHERE UPPER(account_number) = ?", (account_number.strip().upper(),))
+            conn.commit()
+            return cursor.rowcount > 0
 
     def get_subscriber_by_phone(self, phone: str) -> Optional[Dict[str, Any]]:
         cleaned = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
@@ -103,6 +165,28 @@ class TelecomDatabase:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM subscribers WHERE UPPER(account_number) = ?", (account_number.strip().upper(),))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                d["has_active_outage"] = bool(d["has_active_outage"])
+                return d
+            # Fallback: digits search
+            digits = "".join(filter(str.isdigit, account_number))
+            if digits and len(digits) >= 4:
+                cursor.execute("SELECT * FROM subscribers")
+                for r in cursor.fetchall():
+                    acc_digits = "".join(filter(str.isdigit, r["account_number"]))
+                    if digits == acc_digits or digits in acc_digits:
+                        d = dict(r)
+                        d["has_active_outage"] = bool(d["has_active_outage"])
+                        return d
+        return None
+
+    def get_subscriber_by_zip(self, zip_code: str) -> Optional[Dict[str, Any]]:
+        cleaned = zip_code.strip()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM subscribers WHERE zip_code = ? LIMIT 1", (cleaned,))
             row = cursor.fetchone()
             if row:
                 d = dict(row)

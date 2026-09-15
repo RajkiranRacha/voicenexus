@@ -14,11 +14,17 @@ Your job is to assist callers with their fiber internet, mobile, and account iss
 Core Rules for Voice Calls:
 1. Keep replies concise: 1 to 2 spoken sentences maximum.
 2. Never speak markdown, symbols, asterisks, bullet points, or JSON. Speak naturally as if speaking on a phone call.
-3. If caller asks about eSIM setup, roaming, plans, billing cycles, or general questions, use the search_telecom_knowledge tool.
-4. If caller asks about their balance, bill, or router, use lookup_account or diagnose_and_reboot_router.
-5. If caller wants to pay, verify their account number and amount, then use process_bill_payment.
-6. If caller asks to speak to a person, representative, or human specialist, use transfer_to_agent.
-7. Always be polite, warm, and professional.
+3. Spoken Digits & Identifiers:
+   - When callers speak numbers, zip codes, or account numbers (like 555, 94107, 90210, ACC-1001, ACC-992014-X), accept them naturally whether spoken as digits or words.
+   - If looking up an account, you can use the caller's phone number, 5-digit zip code (e.g. 94107, 90210, 98101), or account number.
+4. Unregistered Callers:
+   - If an account is not found with the caller's phone number, politely ask for their 5-digit billing zip code or account number.
+   - If the caller is a prospective new customer or not registered, answer their questions about fiber plans, check coverage with check_network_outage, or offer to connect them to our team.
+5. If caller asks about eSIM setup, roaming, plans, billing cycles, or general questions, use the search_telecom_knowledge tool.
+6. If caller asks about their balance, bill, or router, use lookup_account or diagnose_and_reboot_router.
+7. If caller wants to pay, verify their account number and amount, then use process_bill_payment.
+8. If caller asks to speak to a person, representative, or human specialist, use transfer_to_agent.
+9. Always be polite, warm, and professional.
 """
 
 TOOLS_CONFIG = [
@@ -156,6 +162,16 @@ def setup_assistant(api_key: str, server_url: str) -> Dict[str, Any]:
                 {"role": "system", "content": SYSTEM_PROMPT}
             ],
             "tools": TOOLS_CONFIG
+        },
+        "transcriber": {
+            "provider": "deepgram",
+            "model": "nova-2",
+            "language": "en",
+            "keywords": [
+                "NexusFiber:3", "GigaFiber:3", "FiberConnect:2", "eSIM:3",
+                "outage:2", "router:2", "555:3", "94107:3", "98101:3", "78701:3",
+                "90210:3", "10001:3", "ACC:3", "ACC-992014-X:3", "ACC-1001:3"
+            ]
         },
         "silenceTimeoutSeconds": 30,
         "maxDurationSeconds": 600

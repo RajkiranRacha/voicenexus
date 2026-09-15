@@ -94,3 +94,105 @@ def test_vapi_end_of_call_report():
     cdrs = db.get_recent_cdrs(10)
     found = any("vapi-call-vapi" in c["session_id"] for c in cdrs)
     assert found is True
+
+def test_vapi_spoken_digit_lookup():
+    # Test looking up account with spoken word numbers e.g. "nine four one zero seven"
+    payload = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-spoken-1", "customer": {"number": "+19998887777"}},
+            "toolCallList": [
+                {
+                    "id": "tc-spoken-1",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"zip_code": "nine four one zero seven"}
+                    }
+                }
+            ]
+        }
+    }
+    response = client.post("/api/vapi/webhook", json=payload)
+    assert response.status_code == 200
+    res = response.json()["results"][0]["result"]
+    assert "Account Found" in res
+    assert "Jordan Rivera" in res
+
+def test_vapi_unregistered_caller_guidance():
+    # Test unknown caller with no matching account
+    payload = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-unreg-1", "customer": {"number": "+19990001111"}},
+            "toolCallList": [
+                {
+                    "id": "tc-unreg-1",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"phone_number": "+19990001111"}
+                    }
+                }
+            ]
+        }
+    }
+    response = client.post("/api/vapi/webhook", json=payload)
+    assert response.status_code == 200
+    res = response.json()["results"][0]["result"]
+    assert "Account not found" in res
+    assert "new service" in res
+
+def test_vapi_transfer_to_agent_escalation():
+    from app.services.agent_hub import agent_hub
+    payload = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-esc-1", "customer": {"number": "+15550192834"}},
+            "toolCallList": [
+                {
+                    "id": "tc-esc-1",
+                    "type": "function",
+                    "function": {
+                        "name": "transfer_to_agent",
+                        "arguments": {"reason": "Customer needs billing dispute resolution"}
+                    }
+                }
+            ]
+        }
+    }
+    response = client.post("/api/vapi/webhook", json=payload)
+    assert response.status_code == 200
+    res = response.json()["results"][0]["result"]
+    assert "specialist" in res
+
+    # Verify escalation was stored in agent_hub
+    pending = agent_hub.get_pending()
+    assert any("call-vapi-esc-1" in p["session_id"] for p in pending)
+
+    # Clean up so singleton state doesn't affect other tests
+    agent_hub._pending_escalations.pop("vapi-call-vapi-esc-1", None)
+
+def test_admin_subscriber_crud():
+    # 1. Upsert new subscriber
+    sub_data = {
+        "account_number": "ACC-TEST-99",
+        "phone_number": "+15559998888",
+        "customer_name": "Test User",
+        "zip_code": "90210",
+        "plan_name": "GigaFiber 500",
+        "current_balance": 50.0
+    }
+    res = client.post("/api/admin/subscribers", json=sub_data)
+    assert res.status_code == 200
+    assert res.json()["success"] is True
+
+    # 2. Verify in list
+    list_res = client.get("/api/admin/subscribers")
+    assert any(s["account_number"] == "ACC-TEST-99" for s in list_res.json())
+
+    # 3. Delete subscriber
+    del_res = client.delete("/api/admin/subscribers/ACC-TEST-99")
+    assert del_res.status_code == 200
+    assert del_res.json()["success"] is True
+

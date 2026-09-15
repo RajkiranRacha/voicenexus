@@ -74,10 +74,14 @@ class BssOssService:
         }
 
     def get_account_by_phone(self, phone_number: str) -> Optional[SubscriberAccount]:
-        # Normalize simple formats
-        cleaned = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        from app.utils.speech_normalizer import extract_digits
+        digits = extract_digits(phone_number)
+        if not digits:
+            return None
+        last10 = digits[-10:] if len(digits) >= 10 else digits
         for p, acc in self._accounts.items():
-            if p.endswith(cleaned[-10:]):
+            acc_digits = extract_digits(p)
+            if acc_digits.endswith(last10) or last10.endswith(acc_digits[-10:]):
                 return acc
         try:
             from app.db.database import db
@@ -91,16 +95,17 @@ class BssOssService:
         return None
 
     def get_account_by_number(self, account_number: str) -> Optional[SubscriberAccount]:
-        cleaned = account_number.upper().strip()
-        digits = "".join(filter(str.isdigit, cleaned))
+        from app.utils.speech_normalizer import clean_account_number, extract_digits
+        cleaned = clean_account_number(account_number)
+        digits = extract_digits(account_number)
         for acc in self._accounts.values():
-            if acc.account_number.upper() == cleaned:
+            if acc.account_number.upper() == cleaned or acc.account_number.upper() == account_number.strip().upper():
                 return acc
-            if digits and len(digits) >= 4 and digits in "".join(filter(str.isdigit, acc.account_number)):
+            if digits and len(digits) >= 4 and digits in extract_digits(acc.account_number):
                 return acc
         try:
             from app.db.database import db
-            row = db.get_subscriber_by_account(account_number)
+            row = db.get_subscriber_by_account(cleaned) or db.get_subscriber_by_account(account_number)
             if row:
                 acc = SubscriberAccount(**row)
                 self._accounts[acc.phone_number] = acc
@@ -110,10 +115,20 @@ class BssOssService:
         return None
 
     def get_account_by_zip(self, zip_code: str) -> Optional[SubscriberAccount]:
-        cleaned = zip_code.strip()
+        from app.utils.speech_normalizer import clean_zip_code
+        cleaned = clean_zip_code(zip_code)
         for acc in self._accounts.values():
             if acc.zip_code == cleaned:
                 return acc
+        try:
+            from app.db.database import db
+            row = db.get_subscriber_by_zip(cleaned)
+            if row:
+                acc = SubscriberAccount(**row)
+                self._accounts[acc.phone_number] = acc
+                return acc
+        except Exception:
+            pass
         return None
 
     def record_payment_promise(

@@ -30,7 +30,9 @@ async def agent_desktop_websocket(websocket: WebSocket):
                 data = json.loads(raw_data)
                 msg_type = data.get("type")
                 session_id = data.get("session_id")
-                if msg_type == "ACCEPT_CALL":
+                if msg_type == "PING":
+                    await websocket.send_text(json.dumps({"type": "PONG", "timestamp": data.get("timestamp")}))
+                elif msg_type == "ACCEPT_CALL":
                     agent_id = data.get("agent_id", "agent-sarah-j")
                     await agent_hub.accept_escalation(session_id, agent_id)
                 elif msg_type in [
