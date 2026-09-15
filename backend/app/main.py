@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Scope
 from starlette.responses import Response
-from app.config import config
+from app.config import config, get_ice_servers
 
 
 class SPAStaticFiles(StaticFiles):
@@ -46,6 +46,8 @@ from app.api.routes.telemetry import router as telemetry_router
 from app.api.routes.agent import router as agent_router
 from app.api.routes.admin import router as admin_router
 from app.api.websocket_call import router as call_ws_router
+from app.api.websocket_twilio import router as twilio_router
+from app.api.routes.vapi_webhook import router as vapi_router
 
 app = FastAPI(
     title="VoiceNexus Conversational IVR Platform",
@@ -67,6 +69,8 @@ app.include_router(telemetry_router)
 app.include_router(agent_router)
 app.include_router(admin_router)
 app.include_router(call_ws_router)
+app.include_router(twilio_router)
+app.include_router(vapi_router)
 
 
 @app.get("/api/health")
@@ -80,6 +84,13 @@ def health_check():
         "language": config.LANGUAGE,
         "voice_rate": config.VOICE_RATE,
         "regulatory_disclosure_enabled": config.REGULATORY_DISCLOSURE_ENABLED
+    }
+
+
+@app.get("/api/rtc-config")
+def get_rtc_config():
+    return {
+        "iceServers": get_ice_servers()
     }
 
 # Mount built frontend static files if present

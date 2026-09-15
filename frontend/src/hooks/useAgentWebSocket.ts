@@ -18,14 +18,7 @@ export interface LiveCallSession {
 /**
  * Owns the agent-desktop CTI bridge: pending-escalation fetch + queue
  * updates, live transcript streaming, and the offerer side of the WebRTC
- * voice bridge to an accepted caller. Extracted from AgentDesktop's combined
- * fetch+WebSocket effect.
- *
- * Unlike the original inline effect (which re-ran on every activeCallSessionId
- * change, tearing down and reconnecting the whole CTI WebSocket on every
- * accepted/ended call), this connects once and uses a ref for the "is this
- * CALL_ENDED event for my active call" check -- the hub connection now stays
- * up across accept/end-call cycles.
+ * voice bridge to an accepted caller.
  */
 export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | null>) {
   const [escalations, setEscalations] = useState<EscalationPayload[]>([]);
@@ -36,10 +29,25 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
   const [selectedLiveSessionId, setSelectedLiveSessionId] = useState<string | null>(null);
   const [activeCallSessionId, setActiveCallSessionId] = useState<string | null>(null);
   const [isAudioConnected, setIsAudioConnected] = useState<boolean>(false);
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(false);
+  const [iceServers, setIceServers] = useState<RTCIceServer[] | undefined>(undefined);
 
   const wsRef = useRef<WebSocket | null>(null);
   const activeCallSessionIdRef = useRef<string | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+
   useEffect(() => { activeCallSessionIdRef.current = activeCallSessionId; }, [activeCallSessionId]);
+
+  // Fetch dynamic WebRTC ICE configuration (STUN/TURN) from backend
+  useEffect(() => {
+    apiGet<{ iceServers?: RTCIceServer[] }>('/api/rtc-config')
+      .then((data) => {
+        if (data && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+          setIceServers(data.iceServers);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const sendIceCandidate = useCallback((candidate: RTCIceCandidateInit) => {
     if (wsRef.current?.readyState === WebSocket.OPEN && activeCallSessionIdRef.current) {
@@ -52,14 +60,51 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
   }, []);
 
   const onRemoteStream = useCallback((stream: MediaStream) => {
+    remoteStreamRef.current = stream;
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = stream;
-      remoteAudioRef.current.play().catch(() => {});
-      setIsAudioConnected(true);
+      remoteAudioRef.current.play()
+        .then(() => {
+          setIsAutoplayBlocked(false);
+        })
+        .catch((err) => {
+          console.warn('[Agent] Audio autoplay blocked:', err);
+          setIsAutoplayBlocked(true);
+        });
     }
   }, [remoteAudioRef]);
 
-  const webrtc = useWebRTCPeer({ onIceCandidate: sendIceCandidate, onRemoteStream });
+  // Ensure stream stays attached if remoteAudioRef element is mounted/re-rendered
+  useEffect(() => {
+    if (remoteAudioRef.current && remoteStreamRef.current) {
+      remoteAudioRef.current.srcObject = remoteStreamRef.current;
+      remoteAudioRef.current.play()
+        .then(() => setIsAutoplayBlocked(false))
+        .catch(() => {});
+    }
+  }, [remoteAudioRef]);
+
+  const unlockAudio = useCallback(() => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.play()
+        .then(() => setIsAutoplayBlocked(false))
+        .catch(() => {});
+    }
+  }, [remoteAudioRef]);
+
+  const webrtc = useWebRTCPeer({
+    onIceCandidate: sendIceCandidate,
+    onRemoteStream,
+    iceServers,
+    onConnectionStateChange: (state) => {
+      setIsAudioConnected(state === 'connected');
+    }
+  });
+
+  // Track WebRTC connection state
+  useEffect(() => {
+    setIsAudioConnected(webrtc.connectionState === 'connected');
+  }, [webrtc.connectionState]);
 
   const endActiveCall = useCallback(() => {
     const sessionId = activeCallSessionIdRef.current;
@@ -67,6 +112,7 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
       wsRef.current.send(JSON.stringify({ type: 'AGENT_DISCONNECT', session_id: sessionId }));
     }
     webrtc.close();
+    remoteStreamRef.current = null;
     setIsAudioConnected(false);
     setActiveCallSessionId(null);
 
@@ -122,7 +168,6 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
         } else if (data.type === 'RTC_ANSWER') {
           if (data.sdp) {
             await webrtc.setRemoteAnswer(data.sdp);
-            setIsAudioConnected(true);
           }
         } else if (data.type === 'RTC_ICE_CANDIDATE') {
           if (data.candidate) await webrtc.addRemoteIceCandidate(data.candidate);
@@ -150,7 +195,7 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
           }
         }
       } catch (err) {
-        console.error("Agent WS message handling error:", err);
+        console.error('Agent WS message handling error:', err);
       }
     };
 
@@ -214,6 +259,10 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
     activeCallSessionId,
     isMicActive: webrtc.isMicActive, isMuted: webrtc.isMuted, micError: webrtc.micError,
     isAudioConnected,
+    webrtcConnectionState: webrtc.connectionState,
+    iceConnectionState: webrtc.iceConnectionState,
+    isAutoplayBlocked,
+    unlockAudio,
     toggleMute: webrtc.toggleMute,
     acceptCall, endActiveCall, sendAgentLiveSpeech,
   };

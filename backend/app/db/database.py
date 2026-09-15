@@ -1,0 +1,175 @@
+import os
+import json
+import sqlite3
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+
+DB_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+DB_PATH = os.path.join(DB_DIR, "telecom.db")
+
+class TelecomDatabase:
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self._init_db()
+
+    def _get_connection(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_db(self):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS subscribers (
+                    account_number TEXT PRIMARY KEY,
+                    phone_number TEXT UNIQUE NOT NULL,
+                    customer_name TEXT NOT NULL,
+                    zip_code TEXT NOT NULL,
+                    address TEXT NOT NULL,
+                    plan_name TEXT NOT NULL,
+                    monthly_rate REAL NOT NULL,
+                    current_balance REAL NOT NULL,
+                    due_date TEXT NOT NULL,
+                    payment_card_last4 TEXT DEFAULT '4242',
+                    email TEXT DEFAULT 'customer@example.com',
+                    auth_status TEXT DEFAULT 'UNAUTHENTICATED',
+                    has_active_outage INTEGER DEFAULT 0,
+                    router_status TEXT DEFAULT 'ONLINE'
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cdrs (
+                    session_id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    ani TEXT NOT NULL,
+                    account_number TEXT,
+                    customer_name TEXT,
+                    intent TEXT,
+                    duration_sec INTEGER,
+                    final_state TEXT,
+                    escalation_reason TEXT,
+                    avg_latency_ms REAL,
+                    turns_count INTEGER,
+                    csat_rating INTEGER,
+                    transcript_json TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS outages (
+                    zip_code TEXT PRIMARY KEY,
+                    region TEXT NOT NULL,
+                    affected_subscribers INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    estimated_resolution TEXT NOT NULL,
+                    reason TEXT NOT NULL
+                )
+            """)
+            conn.commit()
+        self._seed_default_data()
+
+    def _seed_default_data(self):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM subscribers")
+            if cursor.fetchone()[0] == 0:
+                subscribers = [
+                    ("ACC-992014-X", "+15550192834", "Jordan Rivera", "94107", "450 Townsend St, San Francisco, CA", "GigaFiber 500 Ultra", 80.0, 142.5, (datetime.now() + timedelta(days=4)).strftime("%Y-%m-%d"), "4242", "jordan.rivera@example.com", "UNAUTHENTICATED", 0, "ONLINE"),
+                    ("ACC-881230-B", "+15550148821", "Elena Vance", "98101", "1201 3rd Ave, Seattle, WA", "FiberConnect 300", 65.0, 0.0, (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d"), "1188", "elena.vance@example.com", "UNAUTHENTICATED", 1, "OFFLINE"),
+                    ("ACC-773419-C", "+15550173399", "Marcus Brody", "78701", "200 Congress Ave, Austin, TX", "Gigabit Pro 1000", 110.0, 220.0, (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"), "9901", "marcus.brody@example.com", "UNAUTHENTICATED", 0, "DEGRADED")
+                ]
+                cursor.executemany("INSERT INTO subscribers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", subscribers)
+
+            cursor.execute("SELECT COUNT(*) FROM outages")
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("INSERT INTO outages VALUES (?, ?, ?, ?, ?, ?)", ("98101", "Downtown Seattle Metro", 1420, "CREW_DISPATCHED", "2 hours from now", "Fiber trunk line damage due to municipal utility work"))
+            conn.commit()
+
+    def get_subscriber_by_phone(self, phone: str) -> Optional[Dict[str, Any]]:
+        cleaned = phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM subscribers")
+            for r in cursor.fetchall():
+                db_phone = r["phone_number"].replace(" ", "").replace("-", "")
+                if db_phone.endswith(cleaned[-10:]) or cleaned.endswith(db_phone[-10:]):
+                    d = dict(r)
+                    d["has_active_outage"] = bool(d["has_active_outage"])
+                    return d
+        return None
+
+    def get_subscriber_by_account(self, account_number: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM subscribers WHERE UPPER(account_number) = ?", (account_number.strip().upper(),))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                d["has_active_outage"] = bool(d["has_active_outage"])
+                return d
+        return None
+
+    def update_balance(self, account_number: str, new_balance: float) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE subscribers SET current_balance = ? WHERE UPPER(account_number) = ?", (round(new_balance, 2), account_number.strip().upper()))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def update_router_status(self, account_number: str, status: str) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE subscribers SET router_status = ? WHERE UPPER(account_number) = ?", (status, account_number.strip().upper()))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_outage_by_zip(self, zip_code: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM outages WHERE zip_code = ?", (zip_code.strip(),))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        return None
+
+    def insert_cdr(self, session_id: str, ani: str, account_number: Optional[str], customer_name: Optional[str], intent: str, duration_sec: int, final_state: str, escalation_reason: Optional[str], avg_latency_ms: float, turns_count: int, transcript: List[Dict[str, Any]], csat_rating: Optional[int] = None):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat()
+            transcript_str = json.dumps(transcript)
+            cursor.execute("""
+                INSERT OR REPLACE INTO cdrs (
+                    session_id, timestamp, ani, account_number, customer_name,
+                    intent, duration_sec, final_state, escalation_reason,
+                    avg_latency_ms, turns_count, csat_rating, transcript_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (session_id, now, ani, account_number or "UNREGISTERED", customer_name or "Unknown Caller", intent, duration_sec, final_state, escalation_reason, avg_latency_ms, turns_count, csat_rating, transcript_str))
+            conn.commit()
+
+    def get_recent_cdrs(self, limit: int = 50) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM cdrs ORDER BY timestamp DESC LIMIT ?", (limit,))
+            rows = cursor.fetchall()
+            results = []
+            for r in rows:
+                d = dict(r)
+                if d.get("transcript_json"):
+                    try:
+                        d["transcript"] = json.loads(d["transcript_json"])
+                    except Exception:
+                        d["transcript"] = []
+                else:
+                    d["transcript"] = []
+                results.append(d)
+            return results
+
+    def record_csat(self, session_id: str, rating: int) -> bool:
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE cdrs SET csat_rating = ? WHERE session_id = ?", (rating, session_id))
+            conn.commit()
+            return cursor.rowcount > 0
+
+db = TelecomDatabase()

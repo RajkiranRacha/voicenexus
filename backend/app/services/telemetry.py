@@ -90,6 +90,24 @@ class TelemetryService:
                 return
 
         self._records.insert(0, record)  # Most recent first
+        try:
+            from app.db.database import db
+            db.insert_cdr(
+                session_id=session_id,
+                ani=ani,
+                account_number=account_number,
+                customer_name=customer_name,
+                intent=intent,
+                duration_sec=max(1, duration_sec),
+                final_state=final_state,
+                escalation_reason=escalation_reason,
+                avg_latency_ms=avg_latency_ms,
+                turns_count=turns_count,
+                transcript=transcript or [],
+                csat_rating=record.get("csat_rating")
+            )
+        except Exception as e:
+            print(f"[Telemetry] SQLite write error: {e}")
 
     def record_csat(self, session_id: str, rating: int) -> bool:
         """
@@ -97,6 +115,12 @@ class TelemetryService:
         record (PRD business-impact category "Care CSAT"). Returns False if no
         matching record is found.
         """
+        try:
+            from app.db.database import db
+            db.record_csat(session_id, rating)
+        except Exception:
+            pass
+
         for r in self._records:
             if r["session_id"] == session_id:
                 r["csat_rating"] = rating

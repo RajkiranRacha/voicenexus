@@ -72,8 +72,17 @@ class VoiceNexusConfig(BaseModel):
     TARGET_LATENCY_MS: int = 1000
 
     # Optional AI Keys
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+    GROQ_WHISPER_MODEL: str = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+
+    # WebRTC / NAT Traversal Configuration
+    TURN_SERVER_URL: str = os.getenv("TURN_SERVER_URL", "")
+    TURN_USERNAME: str = os.getenv("TURN_USERNAME", "")
+    TURN_CREDENTIAL: str = os.getenv("TURN_CREDENTIAL", "")
+    ICE_SERVERS_JSON: str = os.getenv("ICE_SERVERS_JSON", "")
 
     # Local Speech-To-Text (VN-STT): server-side transcription via faster-whisper,
     # running fully offline/on-CPU so caller speech recognition doesn't depend on
@@ -134,10 +143,62 @@ def load_persisted_config():
         config.STT_ENABLED = False
     if "STT_MODEL_SIZE" in os.environ:
         config.STT_MODEL_SIZE = os.environ["STT_MODEL_SIZE"]
+    if "GROQ_API_KEY" in os.environ:
+        config.GROQ_API_KEY = os.environ["GROQ_API_KEY"]
+    if "GROQ_MODEL" in os.environ:
+        config.GROQ_MODEL = os.environ["GROQ_MODEL"]
+    if "GROQ_WHISPER_MODEL" in os.environ:
+        config.GROQ_WHISPER_MODEL = os.environ["GROQ_WHISPER_MODEL"]
     if "GEMINI_API_KEY" in os.environ:
         config.GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
     if "OPENAI_API_KEY" in os.environ:
         config.OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+    if "TURN_SERVER_URL" in os.environ:
+        config.TURN_SERVER_URL = os.environ["TURN_SERVER_URL"]
+    if "TURN_USERNAME" in os.environ:
+        config.TURN_USERNAME = os.environ["TURN_USERNAME"]
+    if "TURN_CREDENTIAL" in os.environ:
+        config.TURN_CREDENTIAL = os.environ["TURN_CREDENTIAL"]
+    if "ICE_SERVERS_JSON" in os.environ:
+        config.ICE_SERVERS_JSON = os.environ["ICE_SERVERS_JSON"]
 
 load_persisted_config()
+
+def get_ice_servers() -> list[dict]:
+    """
+    Returns the array of ICE servers (STUN + TURN) used for WebRTC peer connections.
+    Includes multiple redundant public STUN servers by default, plus any configured
+    TURN relay servers for traversing symmetric NATs and restrictive firewalls.
+    """
+    # 1. Custom raw JSON override (e.g. from Metered or Twilio)
+    if config.ICE_SERVERS_JSON and config.ICE_SERVERS_JSON.strip():
+        try:
+            parsed = json.loads(config.ICE_SERVERS_JSON)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                return parsed
+        except Exception as e:
+            print(f"[Config] Error parsing ICE_SERVERS_JSON: {e}")
+
+    # 2. Default high-reliability public STUN servers
+    servers: list[dict] = [
+        {"urls": [
+            "stun:stun.l.google.com:19302",
+            "stun:stun1.l.google.com:19302",
+            "stun:stun2.l.google.com:19302",
+            "stun:stun.cloudflare.com:3478",
+        ]}
+    ]
+
+    # 3. Configured TURN relay server
+    if config.TURN_SERVER_URL and config.TURN_SERVER_URL.strip():
+        urls = [u.strip() for u in config.TURN_SERVER_URL.split(",") if u.strip()]
+        turn_entry: dict = {"urls": urls}
+        if config.TURN_USERNAME and config.TURN_USERNAME.strip():
+            turn_entry["username"] = config.TURN_USERNAME.strip()
+        if config.TURN_CREDENTIAL and config.TURN_CREDENTIAL.strip():
+            turn_entry["credential"] = config.TURN_CREDENTIAL.strip()
+        servers.append(turn_entry)
+
+    return servers
+
 

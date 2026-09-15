@@ -25,6 +25,9 @@ export const AgentDesktop: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* Audio element for playing caller's voice - permanently mounted */}
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+
       {/* Top Banner with Navigation Tabs */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center space-x-3">
@@ -155,9 +158,6 @@ export const AgentDesktop: React.FC = () => {
                     </div>
 
                     <div>
-                      {/* Audio element for playing caller's voice */}
-                      <audio ref={remoteAudioRef} autoPlay />
-
                       {!agent.acceptedCalls.includes(agent.selectedEscalation.session_id) ? (
                         <button
                           onClick={() => agent.acceptCall(agent.selectedEscalation!.session_id)}
@@ -168,6 +168,18 @@ export const AgentDesktop: React.FC = () => {
                         </button>
                       ) : (
                         <div className="flex items-center space-x-2">
+                          {agent.isAutoplayBlocked && (
+                            <button
+                              type="button"
+                              onClick={agent.unlockAudio}
+                              className="py-1.5 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs flex items-center space-x-1.5 animate-bounce shadow-md shadow-amber-950/40 cursor-pointer"
+                              title="Click to allow audio playback from customer"
+                            >
+                              <Volume2 className="w-3.5 h-3.5" />
+                              <span>Tap to Hear Customer</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={agent.toggleMute}
@@ -210,13 +222,30 @@ export const AgentDesktop: React.FC = () => {
                           <MicStatusBadge isActive={agent.isMicActive} isMuted={agent.isMuted} label="Microphone" />
 
                           <span className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center space-x-1.5 ${
-                            agent.isAudioConnected ? 'bg-cyan-950 text-cyan-300 border-cyan-800' : 'bg-slate-800 text-slate-300 border-slate-700'
+                            agent.isAudioConnected ? 'bg-cyan-950 text-cyan-300 border-cyan-800' :
+                            agent.webrtcConnectionState === 'connecting' ? 'bg-amber-950 text-amber-300 border-amber-800 animate-pulse' :
+                            agent.webrtcConnectionState === 'failed' ? 'bg-rose-950 text-rose-300 border-rose-800' :
+                            'bg-slate-800 text-slate-300 border-slate-700'
                           }`}>
                             <Volume2 className="w-3 h-3 text-cyan-400" />
-                            <span>{agent.isAudioConnected ? 'Two-Way Audio: Connected' : 'Audio Stream: Initializing...'}</span>
+                            <span>
+                              {agent.isAudioConnected ? 'Two-Way Audio: Connected' :
+                               agent.webrtcConnectionState === 'connecting' ? 'Audio: Establishing P2P...' :
+                               agent.webrtcConnectionState === 'failed' ? 'NAT Traversal Failed' :
+                               'Audio Stream: Initializing...'}
+                            </span>
                           </span>
                         </div>
                       </div>
+
+                      {agent.webrtcConnectionState === 'failed' && (
+                        <div className="text-[11px] text-rose-300 bg-rose-950/70 border border-rose-800/80 rounded-lg p-2.5 flex items-start space-x-2">
+                          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                          <div>
+                            <span className="font-bold">Peer-to-Peer NAT Traversal Failed:</span> The connection could not be directly established between these networks (likely due to Symmetric NAT / restrictive firewalls). Add TURN server credentials in <span className="underline font-semibold">Admin Config &gt; NAT / WebRTC</span> (e.g. free from Metered.ca) to enable relay across all networks.
+                          </div>
+                        </div>
+                      )}
 
                       {agent.micError && (
                         <div className="text-[11px] text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded-lg p-2 flex items-center space-x-1.5">
