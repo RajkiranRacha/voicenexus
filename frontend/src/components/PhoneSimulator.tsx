@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone, PhoneOff, Mic, MicOff, Volume2, Radio,
-  Send, ShieldCheck, Zap, Globe, Star
+  Send, ShieldCheck, Zap, Globe, Star,
+  Copy, Check, Users, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { apiPost } from '../api/client';
 import { useCallWebSocket } from '../hooks/useCallWebSocket';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { TranscriptList } from './shared/TranscriptList';
 import { PRESET_CALLERS, PRESET_UTTERANCES } from '../data/presets';
+
+export const TEST_ACCOUNTS = [
+  { name: "Jordan Rivera", account: "ACC-992014-X", phone: "+15550192834", zip: "94107", email: "jordan.rivera@example.com", balance: "$142.50", scenario: "Billing & payment arrangement" },
+  { name: "Elena Vance", account: "ACC-881230-B", phone: "+15550148821", zip: "98101", email: "elena.vance@example.com", balance: "$0.00", scenario: "Active outage in Seattle & offline router" },
+  { name: "Marcus Brody", account: "ACC-773419-C", phone: "+15550173399", zip: "78701", email: "marcus.brody@example.com", balance: "$220.00", scenario: "Degraded Wi-Fi & remote reboot" },
+  { name: "Sam Taylor", account: "ACC-1001", phone: "+15550101001", zip: "90210", email: "sam.taylor@example.com", balance: "$45.00", scenario: "4-digit account lookup (1001)" },
+  { name: "Alex Morgan", account: "ACC-2002", phone: "+15550102002", zip: "10001", email: "alex.morgan@example.com", balance: "$0.00", scenario: "Zero balance & plan upgrade" }
+];
 
 const CsatPrompt: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   const [rating, setRating] = useState<number | null>(null);
@@ -52,6 +61,15 @@ export const PhoneSimulator: React.FC = () => {
   const [customAni, setCustomAni] = useState<string>("");
   const [inputText, setInputText] = useState<string>('');
   const [autoPlayAudio, setAutoPlayAudio] = useState<boolean>(true);
+  const [showCheatSheet, setShowCheatSheet] = useState<boolean>(true);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyOrInsert = (value: string, key: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+    setInputText(value);
+  };
 
   const agentAudioRef = useRef<HTMLAudioElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -299,7 +317,7 @@ export const PhoneSimulator: React.FC = () => {
             <div className="flex items-center space-x-2 text-amber-300">
               <ShieldCheck className="w-4 h-4 text-amber-400" />
               <span>
-                <strong>Unregistered ANI ({activeAni}):</strong> Awaiting Knowledge-Based Authentication (say Account # or Zip Code 94107).
+                <strong>Unregistered ANI ({activeAni}):</strong> Awaiting Verification (say Name, Account #, Phone, Email, or Zip Code).
               </span>
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 flex items-center space-x-1">
@@ -477,6 +495,115 @@ export const PhoneSimulator: React.FC = () => {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Test Accounts Cheat Sheet (Clear Data for Testing) */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <div className="flex items-center space-x-2 text-xs font-semibold uppercase text-indigo-300">
+              <Users className="w-4 h-4 text-indigo-400" />
+              <span>Verified Test Data Cheat Sheet (Click to insert & copy)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCheatSheet(!showCheatSheet)}
+              className="text-xs text-slate-400 hover:text-slate-200 flex items-center space-x-1 cursor-pointer"
+            >
+              <span>{showCheatSheet ? 'Hide' : 'Show'}</span>
+              {showCheatSheet ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            The AI can locate any subscriber using their <strong>Full Name</strong>, <strong>Account ID</strong>, <strong>Phone Number</strong>, <strong>Billing ZIP</strong>, or <strong>Email</strong>. Click any cell to copy and fill the input box:
+          </p>
+
+          {showCheatSheet && (
+            <div className="space-y-2 pt-1">
+              {TEST_ACCOUNTS.map((acc) => (
+                <div
+                  key={acc.account}
+                  className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-xs space-y-2 hover:border-slate-700 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => copyOrInsert(acc.name, `name-${acc.account}`)}
+                        className="font-semibold text-slate-100 hover:text-indigo-300 text-left flex items-center space-x-1.5 cursor-pointer"
+                        title="Click to insert name into input"
+                      >
+                        <span>{acc.name}</span>
+                        {copiedKey === `name-${acc.account}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-2.5 h-2.5 text-slate-500" />}
+                      </button>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                        {acc.balance}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 italic">{acc.scenario}</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[11px]">
+                    {/* Account ID */}
+                    <button
+                      type="button"
+                      onClick={() => copyOrInsert(acc.account, `acc-${acc.account}`)}
+                      className="text-left bg-slate-900/90 hover:bg-indigo-950/50 p-1.5 rounded-lg border border-slate-800 hover:border-indigo-700/60 transition-colors cursor-pointer group"
+                      title="Click to insert account ID"
+                    >
+                      <div className="text-[9px] uppercase text-slate-500 font-medium">Account ID</div>
+                      <div className="font-mono text-indigo-300 font-semibold truncate flex items-center justify-between">
+                        <span>{acc.account}</span>
+                        {copiedKey === `acc-${acc.account}` ? <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" /> : <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 shrink-0" />}
+                      </div>
+                    </button>
+
+                    {/* Phone */}
+                    <button
+                      type="button"
+                      onClick={() => copyOrInsert(acc.phone, `phone-${acc.account}`)}
+                      className="text-left bg-slate-900/90 hover:bg-indigo-950/50 p-1.5 rounded-lg border border-slate-800 hover:border-indigo-700/60 transition-colors cursor-pointer group"
+                      title="Click to insert phone number"
+                    >
+                      <div className="text-[9px] uppercase text-slate-500 font-medium">Phone (ANI)</div>
+                      <div className="font-mono text-slate-200 truncate flex items-center justify-between">
+                        <span>{acc.phone}</span>
+                        {copiedKey === `phone-${acc.account}` ? <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" /> : <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 shrink-0" />}
+                      </div>
+                    </button>
+
+                    {/* Zip */}
+                    <button
+                      type="button"
+                      onClick={() => copyOrInsert(acc.zip, `zip-${acc.account}`)}
+                      className="text-left bg-slate-900/90 hover:bg-indigo-950/50 p-1.5 rounded-lg border border-slate-800 hover:border-indigo-700/60 transition-colors cursor-pointer group"
+                      title="Click to insert ZIP code"
+                    >
+                      <div className="text-[9px] uppercase text-slate-500 font-medium">Billing Zip</div>
+                      <div className="font-mono text-cyan-300 font-semibold truncate flex items-center justify-between">
+                        <span>{acc.zip}</span>
+                        {copiedKey === `zip-${acc.account}` ? <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" /> : <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 shrink-0" />}
+                      </div>
+                    </button>
+
+                    {/* Email */}
+                    <button
+                      type="button"
+                      onClick={() => copyOrInsert(acc.email, `email-${acc.account}`)}
+                      className="text-left bg-slate-900/90 hover:bg-indigo-950/50 p-1.5 rounded-lg border border-slate-800 hover:border-indigo-700/60 transition-colors cursor-pointer group"
+                      title="Click to insert email"
+                    >
+                      <div className="text-[9px] uppercase text-slate-500 font-medium">Email</div>
+                      <div className="text-slate-300 truncate flex items-center justify-between">
+                        <span className="truncate">{acc.email}</span>
+                        {copiedKey === `email-${acc.account}` ? <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" /> : <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 shrink-0" />}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

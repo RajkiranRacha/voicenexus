@@ -31,11 +31,11 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "lookup_account",
-            "description": "Look up subscriber account by account number (ACC-xxx), registered phone (+1xxx), or ZIP code.",
+            "description": "Look up subscriber account by customer name (e.g. 'Jordan Rivera', 'Elena Vance'), account number ('ACC-992014-X', '1001'), registered phone (+1555...), billing ZIP code ('94107'), or email address ('jordan.rivera@example.com').",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "identifier": {"type": "string", "description": "Account number, phone number, or ZIP code"}
+                    "identifier": {"type": "string", "description": "Customer name, account number, phone number, ZIP code, or email address"}
                 },
                 "required": ["identifier"]
             }
@@ -142,8 +142,8 @@ class LLMAgent:
             f"VOICE CALL RULES:\n"
             f"1. SPOKEN BREVITY: Reply in 1 or 2 concise spoken sentences only. Never speak essays, bullets, or lists.\n"
             f"2. NO MARKDOWN: Never use asterisks, bolding, bullet points, headers, or markdown formatting.\n"
-            f"3. ANY PHONE NUMBER: If caller is unrecognized, answer general questions immediately! Only ask for an account number or phone number when they ask about personal bills, account balance, or line repair.\n"
-            f"4. TOOLS: When asked about eSIM, roaming rates, Wi-Fi password, router lights, or policies, ALWAYS call search_telecom_knowledge. When asked for account details, call lookup_account. When asked for outages, call check_network_outage.\n"
+            f"3. ANY PHONE NUMBER: If caller is unrecognized, answer general questions immediately! When they ask about personal bills, account balance, or line repair, verify them by asking for their account number, registered phone number, billing ZIP code, full name, or email.\n"
+            f"4. TOOLS: When asked about eSIM, roaming rates, Wi-Fi password, router lights, or policies, ALWAYS call search_telecom_knowledge. When asked for account details or when caller provides their name, email, account number, phone number, or ZIP code, ALWAYS call lookup_account. When asked for outages, call check_network_outage.\n"
             f"5. CONFIRMATION: Always confirm with the caller before executing a payment or restarting their router.\n"
             f"6. ESCALATION: If the caller asks for a human, representative, agent, or operator, immediately call transfer_to_agent.\n"
             f"7. LANGUAGE: Respond in Spanish if the user speaks Spanish, Hindi if Hindi, otherwise English.\n"
@@ -174,7 +174,14 @@ class LLMAgent:
 
         elif name == "lookup_account":
             ident = args.get("identifier", "").strip()
-            acc = bss_service.get_account_by_phone(ident) or bss_service.get_account_by_number(ident) or bss_service.get_account_by_zip(ident)
+            acc = (
+                bss_service.get_account_by_phone(ident)
+                or bss_service.get_account_by_number(ident)
+                or bss_service.get_account_by_zip(ident)
+                or bss_service.get_account_by_name(ident)
+                or bss_service.get_account_by_email(ident)
+                or identity_service.verify_knowledge_based(ident)
+            )
             if acc:
                 acc.auth_status = AuthStatus.KBA_VERIFIED
                 self.account = acc
@@ -189,6 +196,7 @@ class LLMAgent:
                     "card_last4": acc.payment_card_last4,
                     "router_status": acc.router_status,
                     "zip_code": acc.zip_code,
+                    "email": acc.email,
                     "auth_status": acc.auth_status.value
                 }
             return {"found": False, "message": f"No active account found for '{ident}'."}

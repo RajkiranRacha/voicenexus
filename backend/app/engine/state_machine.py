@@ -160,9 +160,8 @@ class CallSessionStateMachine:
 
             # If not matched
             return (
-                "I couldn't locate an account with that information. Please speak or enter your 6-digit account number, "
-                "your 5-digit billing ZIP code, say 'text me a code' to receive a verification code by SMS, "
-                "or say 'agent' to speak with customer care.",
+                "I couldn't locate an account with that information. Please speak or enter your account number, "
+                "billing ZIP code, registered phone number, full name, or email address.",
                 self.state,
                 None
             )
@@ -256,7 +255,7 @@ class CallSessionStateMachine:
                 self.pending_intent = intent
                 return (
                     "To access your billing details and account transactions, I first need to locate your account. "
-                    "Please state your account number or billing ZIP code.",
+                    "Please state your account number, registered phone number, billing ZIP code, full name, or email address.",
                     self.state,
                     None
                 )
