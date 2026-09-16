@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -92,6 +92,14 @@ def get_rtc_config():
     return {
         "iceServers": get_ice_servers()
     }
+
+
+@app.post("/")
+async def root_webhook_fallback(request: Request):
+    """Fallback handler in case Vapi or phone number sends webhook calls to root URL."""
+    from app.api.routes.vapi_webhook import vapi_webhook
+    return await vapi_webhook(request)
+
 
 # Mount built frontend static files if present
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))

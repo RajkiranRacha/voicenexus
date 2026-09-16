@@ -200,3 +200,120 @@ def test_admin_subscriber_crud():
     assert del_res.status_code == 200
     assert del_res.json()["success"] is True
 
+
+def test_vapi_lookup_account_numeric_1001():
+    # 1. Pure numeric string "1001"
+    payload = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-num-1", "customer": {}},
+            "toolCallList": [
+                {
+                    "id": "tc-1001",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"account_number": "1001"}
+                    }
+                }
+            ]
+        }
+    }
+    response = client.post("/api/vapi/webhook", json=payload)
+    assert response.status_code == 200
+    res = response.json()["results"][0]["result"]
+    assert "Account Found" in res
+    assert "Jordan Rivera" in res
+    assert "#1001" in res
+
+
+def test_vapi_lookup_account_aliases_and_types():
+    # 2. Integer 1001
+    payload_int = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-num-2", "customer": {}},
+            "toolCallList": [
+                {
+                    "id": "tc-int",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"account_number": 1001}
+                    }
+                }
+            ]
+        }
+    }
+    res_int = client.post("/api/vapi/webhook", json=payload_int)
+    assert res_int.status_code == 200
+    assert "Jordan Rivera" in res_int.json()["results"][0]["result"]
+
+    # 3. Alias key 'identifier'
+    payload_ident = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-num-3", "customer": {}},
+            "toolCallList": [
+                {
+                    "id": "tc-ident",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"identifier": "1004"}
+                    }
+                }
+            ]
+        }
+    }
+    res_ident = client.post("/api/vapi/webhook", json=payload_ident)
+    assert res_ident.status_code == 200
+    assert "Sam Taylor" in res_ident.json()["results"][0]["result"]
+
+    # 4. Alias key 'accountNumber'
+    payload_camel = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-vapi-num-4", "customer": {}},
+            "toolCallList": [
+                {
+                    "id": "tc-camel",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"accountNumber": "1002"}
+                    }
+                }
+            ]
+        }
+    }
+    res_camel = client.post("/api/vapi/webhook", json=payload_camel)
+    assert res_camel.status_code == 200
+    assert "Elena Vance" in res_camel.json()["results"][0]["result"]
+
+
+def test_vapi_root_post_fallback():
+    # Test POST directly to "/" (root URL)
+    payload = {
+        "message": {
+            "type": "tool-calls",
+            "call": {"id": "call-root-test", "customer": {}},
+            "toolCallList": [
+                {
+                    "id": "tc-root",
+                    "type": "function",
+                    "function": {
+                        "name": "lookup_account",
+                        "arguments": {"account_number": "1001"}
+                    }
+                }
+            ]
+        }
+    }
+    response = client.post("/", json=payload)
+    assert response.status_code == 200
+    res = response.json()["results"][0]["result"]
+    assert "Account Found" in res
+    assert "Jordan Rivera" in res
+
+

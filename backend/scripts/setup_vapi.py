@@ -15,10 +15,10 @@ Core Rules for Voice Calls:
 1. Keep replies concise: 1 to 2 spoken sentences maximum.
 2. Never speak markdown, symbols, asterisks, bullet points, or JSON. Speak naturally as if speaking on a phone call.
 3. Spoken Digits & Identifiers:
-   - When callers speak numbers, zip codes, or account numbers (like 555, 94107, 90210, ACC-1001, ACC-992014-X), accept them naturally whether spoken as digits or words.
-   - If looking up an account, you can use the caller's phone number, 5-digit zip code (e.g. 94107, 90210, 98101), or account number.
+   - Callers have 4-digit numeric account numbers like 1001, 1002, 1003, 1004, 1005 (or legacy ACC-1001, ACC-992014-X), 5-digit zip codes (e.g. 94107, 90210, 98101, 78701, 10001), and phone numbers. Accept them naturally whether spoken as digits or words.
+   - For account lookup or balance checks, ALWAYS call the lookup_account tool using the provided account_number (e.g. "1001"), phone_number, or zip_code.
 4. Unregistered Callers:
-   - If an account is not found with the caller's phone number, politely ask for their 5-digit billing zip code or account number.
+   - If an account is not found with the caller's phone number or account number, politely ask for their 5-digit billing zip code or registered phone number.
    - If the caller is a prospective new customer or not registered, answer their questions about fiber plans, check coverage with check_network_outage, or offer to connect them to our team.
 5. If caller asks about eSIM setup, roaming, plans, billing cycles, or general questions, use the search_telecom_knowledge tool.
 6. If caller asks about their balance, bill, or router, use lookup_account or diagnose_and_reboot_router.
@@ -32,13 +32,22 @@ TOOLS_CONFIG = [
         "type": "function",
         "function": {
             "name": "lookup_account",
-            "description": "Look up subscriber account by account_number, phone_number, or billing zip_code",
+            "description": "Look up subscriber account by 4-digit account_number (e.g. 1001, 1002, 1003, 1004, 1005), phone_number, or billing zip_code",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "account_number": {"type": "string", "description": "e.g. ACC-992014-X"},
-                    "phone_number": {"type": "string"},
-                    "zip_code": {"type": "string"}
+                    "account_number": {
+                        "type": "string",
+                        "description": "Subscriber account number, e.g. 1001, 1002, 1003, 1004, 1005, or ACC-992014-X"
+                    },
+                    "phone_number": {
+                        "type": "string",
+                        "description": "Subscriber phone number, e.g. +15550192834"
+                    },
+                    "zip_code": {
+                        "type": "string",
+                        "description": "Subscriber 5-digit billing zip code, e.g. 94107, 98101, 78701, 90210, 10001"
+                    }
                 }
             }
         }
@@ -142,7 +151,16 @@ def get_assistants(api_key: str) -> List[Dict[str, Any]]:
 def get_phone_numbers(api_key: str) -> List[Dict[str, Any]]:
     return make_request(f"{VAPI_API_BASE}/phone-number", api_key, "GET")
 
+def _normalize_webhook_url(url: str) -> str:
+    cleaned = (url or "").strip().rstrip("/")
+    if not cleaned:
+        return ""
+    if not cleaned.endswith("/api/vapi/webhook"):
+        cleaned = f"{cleaned}/api/vapi/webhook"
+    return cleaned
+
 def setup_assistant(api_key: str, server_url: str) -> Dict[str, Any]:
+    webhook_url = _normalize_webhook_url(server_url)
     assistants = get_assistants(api_key)
     target_asst = None
     for a in assistants:
@@ -154,7 +172,11 @@ def setup_assistant(api_key: str, server_url: str) -> Dict[str, Any]:
     payload = {
         "name": "VoiceNexus AI",
         "firstMessage": "Thank you for calling NexusFiber Telco! How can I help you today?",
-        "serverUrl": server_url,
+        "serverUrl": webhook_url,
+        "server": {
+            "url": webhook_url,
+            "timeoutSeconds": 20
+        },
         "model": {
             "provider": "openai",
             "model": "gpt-4o-mini",
@@ -169,8 +191,8 @@ def setup_assistant(api_key: str, server_url: str) -> Dict[str, Any]:
             "language": "en",
             "keywords": [
                 "NexusFiber:3", "GigaFiber:3", "FiberConnect:2", "eSIM:3",
-                "outage:2", "router:2", "555:3", "94107:3", "98101:3", "78701:3",
-                "90210:3", "10001:3", "ACC:3", "ACC-992014-X:3", "ACC-1001:3"
+                "outage:2", "router:2", "account:3", "balance:2", "ACC:3",
+                "broadband:2", "billing:2"
             ]
         },
         "silenceTimeoutSeconds": 30,
@@ -190,6 +212,7 @@ def setup_assistant(api_key: str, server_url: str) -> Dict[str, Any]:
         return created
 
 def setup_phone_number(api_key: str, assistant_id: str, server_url: str):
+    webhook_url = _normalize_webhook_url(server_url)
     numbers = get_phone_numbers(api_key)
     if not numbers:
         print("No phone numbers found in your Vapi account.")
@@ -202,7 +225,7 @@ def setup_phone_number(api_key: str, assistant_id: str, server_url: str):
         print(f"Configuring phone number: {phone_num} ({phone_id})...")
         payload = {
             "assistantId": assistant_id,
-            "server": {"url": server_url, "timeoutSeconds": 20}
+            "server": {"url": webhook_url, "timeoutSeconds": 20}
         }
         make_request(f"{VAPI_API_BASE}/phone-number/{phone_id}", api_key, "PATCH", payload)
         print(f"SUCCESS: Phone number {phone_num} is now connected to VoiceNexus AI!")
