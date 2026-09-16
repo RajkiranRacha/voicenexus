@@ -48,6 +48,29 @@ def search_kb(query: str) -> str:
     return "No exact telecom policy found. Standard fiber account guidelines apply."
 
 
+# In-memory session context for active Vapi calls
+_vapi_sessions: Dict[str, Dict[str, Any]] = {}
+
+def get_or_create_session(session_id: str, caller_ani: str = "") -> Dict[str, Any]:
+    """Retrieves or creates session context for multi-turn Vapi calls."""
+    if session_id not in _vapi_sessions:
+        matched_acc = bss_service.get_account_by_phone(caller_ani) if caller_ani else None
+        _vapi_sessions[session_id] = {
+            "session_id": session_id,
+            "caller_ani": caller_ani,
+            "account": matched_acc,
+            "primary_intent": "TELECOM_CARE",
+            "escalated": False,
+            "escalation_reason": None,
+            "turns_count": 0,
+        }
+    elif caller_ani and not _vapi_sessions[session_id].get("caller_ani"):
+        _vapi_sessions[session_id]["caller_ani"] = caller_ani
+        if not _vapi_sessions[session_id].get("account"):
+            _vapi_sessions[session_id]["account"] = bss_service.get_account_by_phone(caller_ani)
+    return _vapi_sessions[session_id]
+
+
 @router.post("/webhook")
 async def vapi_webhook(request: Request):
     """
@@ -65,6 +88,8 @@ async def vapi_webhook(request: Request):
     call_id = call.get("id", "vapi-call")
     session_id = f"vapi-{call_id}"
     customer_ani = call.get("customer", {}).get("number") or ""
+    session_ctx = get_or_create_session(session_id, customer_ani)
+    session_ctx["turns_count"] += 1
 
     # 1. TOOL CALLS: Vapi assistant wants to execute backend actions
     if msg_type == "tool-calls":
@@ -120,32 +145,49 @@ async def vapi_webhook(request: Request):
         transcript_turns = message.get("transcript", "")
         summary = message.get("summary", "Vapi cellular call completed.")
 
+        sess = _vapi_sessions.pop(session_id, {})
+        acc = sess.get("account") or (bss_service.get_account_by_phone(customer_ani) if customer_ani else None)
+        acc_num = acc.account_number if acc else "UNREGISTERED"
+        cust_name = acc.customer_name if acc else "Unknown Caller"
+        is_escalated = sess.get("escalated", False)
+        esc_reason = sess.get("escalation_reason")
+        final_state = "ESCALATED_TO_AGENT" if is_escalated else "RESOLVED_CONTAINED"
+        intent = sess.get("primary_intent", "TELECOM_CARE")
+        turns = sess.get("turns_count") or len(message.get("messages", [])) or 4
+
         # Persist to SQLite
         try:
             db.insert_cdr(
                 session_id=session_id,
-                ani=customer_ani,
-                account_number="ACC-992014-X",
-                customer_name="Jordan Rivera",
-                intent="TELECOM_CARE",
+                ani=customer_ani or (acc.phone_number if acc else "+15550000000"),
+                account_number=acc_num,
+                customer_name=cust_name,
+                intent=intent,
                 duration_sec=duration,
-                final_state="RESOLVED_CONTAINED",
-                escalation_reason=None,
+                final_state=final_state,
+                escalation_reason=esc_reason,
                 avg_latency_ms=250.0,
-                turns_count=len(message.get("messages", [])) or 4,
+                turns_count=turns,
                 transcript=[{"speaker": "transcript", "text": transcript_turns}]
             )
         except Exception as e:
             logger.error(f"[Vapi] Error recording CDR to SQLite: {e}")
 
         # Post-Call SMS
-        if customer_ani:
-            sms_body = (
-                f"NexusFiber Care: Thank you for calling! (Ref #{session_id[:8]}). "
-                f"Your request has been logged. For digital self-service & eSIM guides, "
-                f"visit: https://nexusfiber.telco/myaccount"
-            )
-            await sms_service.send_sms(customer_ani, sms_body)
+        target_phone = customer_ani or (acc.phone_number if acc else "")
+        if target_phone:
+            if is_escalated:
+                sms_body = (
+                    f"NexusFiber Care: Your request has been transferred to a care specialist (Ref #{session_id[:8]}). "
+                    f"Our specialist is reviewing your file. Manage your account at: https://nexusfiber.telco/myaccount"
+                )
+            else:
+                sms_body = (
+                    f"NexusFiber Care: Thank you for calling! (Ref #{session_id[:8]}). "
+                    f"Your request has been resolved. For self-service, bill pay, & eSIM guides, "
+                    f"visit: https://nexusfiber.telco/myaccount"
+                )
+            await sms_service.send_sms(target_phone, sms_body)
 
         return {"status": "completed"}
 
@@ -159,7 +201,10 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
 
     from app.utils.speech_normalizer import clean_account_number, clean_zip_code
 
+    session_ctx = get_or_create_session(session_id, caller_ani)
+
     if name == "lookup_account":
+        session_ctx["primary_intent"] = "BILLING_INQUIRY"
         raw_acc = (
             args.get("account_number")
             or args.get("accountNumber")
@@ -192,6 +237,7 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
             acc = bss_service.get_account_by_phone(str(caller_ani).strip())
 
         if acc:
+            session_ctx["account"] = acc
             return (
                 f"Account Found: Customer {acc.customer_name}, Account #{acc.account_number}. "
                 f"Current Balance: ${acc.current_balance:.2f} due on {acc.due_date}. "
@@ -204,10 +250,12 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         )
 
     elif name == "search_telecom_knowledge":
+        session_ctx["primary_intent"] = "GENERAL_POLICY"
         query = args.get("query") or args.get("q") or args.get("topic") or ""
         return search_kb(query)
 
     elif name == "process_bill_payment":
+        session_ctx["primary_intent"] = "PAYMENT"
         raw_acc = (
             args.get("account_number")
             or args.get("accountNumber")
@@ -215,6 +263,9 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
             or args.get("account_id")
             or args.get("identifier")
         )
+        if not raw_acc and session_ctx.get("account"):
+            raw_acc = session_ctx["account"].account_number
+
         acc_num = clean_account_number(str(raw_acc)) if raw_acc is not None else None
         amount = float(args.get("amount", 0.0))
         if not acc_num or amount <= 0:
@@ -226,20 +277,31 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         )
 
     elif name == "diagnose_and_reboot_router":
+        session_ctx["primary_intent"] = "TECH_SUPPORT"
         raw_acc = (
             args.get("account_number")
             or args.get("accountNumber")
             or args.get("account")
             or args.get("account_id")
             or args.get("identifier")
-            or "1001"
         )
+        if not raw_acc and session_ctx.get("account"):
+            raw_acc = session_ctx["account"].account_number
+        elif not raw_acc:
+            raw_acc = "1001"
+
         acc_num = clean_account_number(str(raw_acc))
         res = bss_service.bounce_router(acc_num)
         return f"Router reset signal sent. Status: {res.get('status')}. Message: {res.get('message')}"
 
     elif name == "check_network_outage":
-        raw_zip = args.get("zip_code", "94107")
+        session_ctx["primary_intent"] = "OUTAGE_TRIAGE"
+        raw_zip = args.get("zip_code")
+        if not raw_zip and session_ctx.get("account"):
+            raw_zip = session_ctx["account"].zip_code
+        elif not raw_zip:
+            raw_zip = "94107"
+
         zip_c = clean_zip_code(raw_zip) or "94107"
         outage = bss_service.check_outage_by_zip(zip_c)
         if outage:
@@ -252,19 +314,37 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
 
     elif name == "transfer_to_agent":
         reason = args.get("reason", "Caller requested human representative")
+        session_ctx["escalated"] = True
+        session_ctx["escalation_reason"] = reason
+        session_ctx["primary_intent"] = "AGENT_ESCALATION"
         online = agent_hub.has_online_agents
 
-        # Look up profile context if available
-        matched_acc = bss_service.get_account_by_phone(caller_ani)
+        # Look up profile context: explicit argument -> session cache -> caller ANI match
+        raw_acc = (
+            args.get("account_number")
+            or args.get("accountNumber")
+            or args.get("account")
+            or args.get("identifier")
+        )
+        matched_acc = None
+        if raw_acc:
+            acc_num = clean_account_number(str(raw_acc))
+            matched_acc = bss_service.get_account_by_number(acc_num) or bss_service.get_account_by_number(str(raw_acc))
+        if not matched_acc:
+            matched_acc = session_ctx.get("account")
+        if not matched_acc and caller_ani:
+            matched_acc = bss_service.get_account_by_phone(caller_ani)
+
         cust_name = matched_acc.customer_name if matched_acc else "Caller"
         acc_id = matched_acc.account_number if matched_acc else "UNREGISTERED"
+        phone_num = matched_acc.phone_number if matched_acc else caller_ani
 
         cust_profile = {
             "account_number": acc_id,
             "customer_name": cust_name,
             "auth_status": matched_acc.auth_status.value if matched_acc else "UNAUTHENTICATED",
-            "auth_method": "ANI_PASSIVE_MATCH" if matched_acc else "NONE",
-            "phone_number": caller_ani,
+            "auth_method": "ACCOUNT_VERIFIED" if matched_acc else "NONE",
+            "phone_number": phone_num,
             "source": "vapi_phone"
         }
         if matched_acc:
@@ -274,13 +354,13 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
 
         escalation_payload = EscalationPayload(
             session_id=session_id,
-            ani=caller_ani,
+            ani=caller_ani or phone_num,
             customer_profile=cust_profile,
             call_context={
                 "primary_intent": "AGENT_ESCALATION",
                 "intent_confidence": 0.95,
                 "duration_in_ivr_seconds": 30,
-                "turns_count": 4,
+                "turns_count": session_ctx.get("turns_count", 4),
                 "caller_intent": "AGENT_ESCALATION",
                 "provider": "vapi"
             },

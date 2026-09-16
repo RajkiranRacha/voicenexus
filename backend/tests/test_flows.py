@@ -4,6 +4,13 @@ from app.engine.state_machine import CallSessionStateMachine
 from app.services.identity import identity_service
 from app.services.bss_oss import bss_service
 from app.services.telemetry import telemetry_service
+from app.db.database import db
+
+@pytest.fixture(autouse=True)
+def reset_state():
+    db.reseed_defaults(force=True)
+    bss_service.reload_from_db()
+    yield
 
 def test_ani_passive_authentication():
     status, acc = identity_service.verify_ani("+15550192834")

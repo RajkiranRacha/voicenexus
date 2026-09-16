@@ -23,7 +23,11 @@ Core Rules for Voice Calls:
 5. If caller asks about eSIM setup, roaming, plans, billing cycles, or general questions, use the search_telecom_knowledge tool.
 6. If caller asks about their balance, bill, or router, use lookup_account or diagnose_and_reboot_router.
 7. If caller wants to pay, verify their account number and amount, then use process_bill_payment.
-8. If caller asks to speak to a person, representative, or human specialist, use transfer_to_agent.
+8. Escalation & Transfer to Human Specialist:
+   - If the caller asks to speak to a person, human, agent, representative, or specialist, use transfer_to_agent immediately.
+   - If an issue is out of scope (e.g. complex billing disputes, account cancellation, damaged line, or router reset fails to resolve the issue), use transfer_to_agent.
+   - If the caller is frustrated or the issue cannot be resolved by automated tools, use transfer_to_agent.
+   - Provide a clear reason and include the caller's account_number if known.
 9. Always be polite, warm, and professional.
 """
 
@@ -113,11 +117,18 @@ TOOLS_CONFIG = [
         "type": "function",
         "function": {
             "name": "transfer_to_agent",
-            "description": "Escalate and transfer call to an online care specialist in the web portal",
+            "description": "Escalate and transfer call to an online care specialist in the web portal when out of scope, unresolvable, or requested by caller",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "reason": {"type": "string"}
+                    "reason": {
+                        "type": "string",
+                        "description": "Detailed explanation of why the call is being escalated to a human agent"
+                    },
+                    "account_number": {
+                        "type": "string",
+                        "description": "Caller's 4-digit account number if verified or known, e.g. 1001"
+                    }
                 },
                 "required": ["reason"]
             }
