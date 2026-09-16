@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { RefObject } from 'react';
-import { apiGet, wsUrl } from '../api/client';
+import { apiGet, apiPost, wsUrl } from '../api/client';
 import { useWebRTCPeer } from './useWebRTCPeer';
 import { useTtsPlayback } from './useTtsPlayback';
 import type { DialogueTurn, CallerProfile, LatencyMetrics } from '../types';
@@ -29,6 +29,7 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
 
   const endCallRef = useRef<() => void>(() => {});
   const autoCloseTimerRef = useRef<number | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [iceServers, setIceServers] = useState<RTCIceServer[] | undefined>(undefined);
   const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(false);
@@ -104,12 +105,22 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     ws.onopen = () => {
       setCallState('IN_CALL');
       ws.send(JSON.stringify({ type: 'START_CALL', ani }));
+
+      // Periodic heartbeat ping every 20s to prevent Render proxy timeout
+      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'PING', timestamp: Date.now() }));
+        }
+      }, 20000);
     };
 
     ws.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'SESSION_STARTED') {
+        if (data.type === 'PONG') {
+          return;
+        } else if (data.type === 'SESSION_STARTED') {
           setAwaitingResponse(false);
           if (data.session_id) setSessionId(data.session_id);
           setCallerProfile(data.caller_account || null);
@@ -188,6 +199,10 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
 
     ws.onclose = () => {
       setAwaitingResponse(false);
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
       if (callStateRef.current !== 'ENDED' && callStateRef.current !== 'ESCALATED') {
         setCallState('ENDED');
       }
@@ -201,6 +216,10 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     if (autoCloseTimerRef.current) {
       window.clearTimeout(autoCloseTimerRef.current);
       autoCloseTimerRef.current = null;
+    }
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
     }
     stopPlayback();
     webrtc.close();
@@ -221,6 +240,9 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     return () => {
       if (autoCloseTimerRef.current) {
         window.clearTimeout(autoCloseTimerRef.current);
+      }
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
       }
     };
   }, []);
@@ -265,6 +287,13 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     wsRef.current.send(JSON.stringify({ type: 'DTMF_KEY', digit }));
   }, [connectedAgent, awaitingResponse, handleBargeIn]);
 
+  const acceptAsAgent = useCallback(() => {
+    if (sessionId) {
+      apiPost('/api/agent/accept', { session_id: sessionId, agent_id: 'agent-sarah-j' })
+        .catch(err => console.error("Error accepting call as agent:", err));
+    }
+  }, [sessionId]);
+
   return {
     callState, turns, latestLatency, callerProfile, callLanguage, audioDegraded, connectedAgent, sessionId,
     awaitingResponse,
@@ -276,6 +305,6 @@ export function useCallWebSocket(agentAudioRef: RefObject<HTMLAudioElement | nul
     iceConnectionState: webrtc.iceConnectionState,
     isAutoplayBlocked,
     unlockAudio,
-    startCall, endCall, sendUtterance, sendDtmf, handleBargeIn,
+    startCall, endCall, sendUtterance, sendDtmf, handleBargeIn, acceptAsAgent,
   };
 }

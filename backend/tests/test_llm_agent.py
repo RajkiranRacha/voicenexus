@@ -70,6 +70,10 @@ async def test_llm_agent_tools_execution():
     assert esc_res["status"] == "TRANSFERRED"
     assert agent.is_escalated is True
     assert agent.escalation_payload is not None
+    assert agent.escalation_payload.call_context.get("primary_intent") == "AGENT_ESCALATION"
+    assert "customer_name" in agent.escalation_payload.customer_profile
+    assert "notes" in agent.escalation_payload.resolution_summary
+    assert "current_balance" in agent.escalation_payload.resolution_summary
 
 def test_clean_spoken_text():
     agent = LLMAgent(session_id="test-clean", ani="+15550192834")

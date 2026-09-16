@@ -5,29 +5,33 @@ export interface NextBestAction {
 }
 
 /** Pure lookup, no I/O: suggests an agent-desktop next-best-action from the AI-prepared escalation context. */
-export function getNextBestAction(intent: string, balance: number, reason: string): NextBestAction {
-  if (reason.includes("OUT_OF_SCOPE") || reason.includes("DISPUTE")) {
+export function getNextBestAction(intent?: string | null, balance?: number | null, reason?: string | null): NextBestAction {
+  const safeReason = (reason || '').toUpperCase();
+  const safeIntent = (intent || '').toUpperCase();
+  const safeBalance = typeof balance === 'number' && !isNaN(balance) ? balance : 0;
+
+  if (safeReason.includes("OUT_OF_SCOPE") || safeReason.includes("DISPUTE")) {
     return {
       action: "Specialized Billing Review",
       recommendation: "Review line-item charges on latest invoice. Customer requested split-payment or fee dispute which requires manual adjustment override.",
       tip: "You have authority to issue a courtesy credit of up to $25 without supervisor sign-off."
     };
   }
-  if (intent.includes("BILLING") || intent.includes("PAYMENT")) {
+  if (safeIntent.includes("BILLING") || safeIntent.includes("PAYMENT")) {
     return {
       action: "Payment Resolution & Autopay Enrollment",
-      recommendation: `Customer balance is $${balance.toFixed(2)}. Offer 3-month split arrangement or $10 monthly discount for Autopay sign-up.`,
+      recommendation: `Customer balance is $${safeBalance.toFixed(2)}. Offer 3-month split arrangement or $10 monthly discount for Autopay sign-up.`,
       tip: "Confirm payment promise in BSS to prevent automatic service suspension."
     };
   }
-  if (intent.includes("OUTAGE")) {
+  if (safeIntent.includes("OUTAGE")) {
     return {
       action: "Active Service Restoration Check",
       recommendation: "Regional fiber outage active. Inform customer repair crew is on-site with estimated restoration in 2 hours. Do NOT dispatch a truck.",
       tip: "Enroll customer in automated SMS restoration alerts."
     };
   }
-  if (intent.includes("PLAN")) {
+  if (safeIntent.includes("PLAN")) {
     return {
       action: "Loyalty Upgrade Offer",
       recommendation: "Eligible for Gigabit Pro 1000 promotion ($110/mo) with free Wi-Fi 6 gateway upgrade.",
