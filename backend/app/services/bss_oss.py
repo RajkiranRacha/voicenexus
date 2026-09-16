@@ -18,10 +18,10 @@ class BssOssService:
         self._seed_initial_data()
 
     def _seed_initial_data(self):
-        # Seed realistic telecom subscribers
+        # Seed realistic telecom subscribers with simple numeric account numbers
         subscribers = [
             SubscriberAccount(
-                account_number="ACC-992014-X",
+                account_number="1001",
                 phone_number="+15550192834",
                 customer_name="Jordan Rivera",
                 zip_code="94107",
@@ -30,11 +30,13 @@ class BssOssService:
                 monthly_rate=80.00,
                 current_balance=142.50,
                 due_date=(datetime.now() + timedelta(days=4)).strftime("%Y-%m-%d"),
+                payment_card_last4="4242",
+                email="jordan.rivera@example.com",
                 has_active_outage=False,
                 router_status="ONLINE"
             ),
             SubscriberAccount(
-                account_number="ACC-881230-B",
+                account_number="1002",
                 phone_number="+15550148821",
                 customer_name="Elena Vance",
                 zip_code="98101",
@@ -43,11 +45,13 @@ class BssOssService:
                 monthly_rate=65.00,
                 current_balance=0.00,
                 due_date=(datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d"),
+                payment_card_last4="1188",
+                email="elena.vance@example.com",
                 has_active_outage=True,
                 router_status="OFFLINE"
             ),
             SubscriberAccount(
-                account_number="ACC-773419-C",
+                account_number="1003",
                 phone_number="+15550173399",
                 customer_name="Marcus Brody",
                 zip_code="78701",
@@ -62,7 +66,7 @@ class BssOssService:
                 router_status="DEGRADED"
             ),
             SubscriberAccount(
-                account_number="ACC-1001",
+                account_number="1004",
                 phone_number="+15550101001",
                 customer_name="Sam Taylor",
                 zip_code="90210",
@@ -71,13 +75,13 @@ class BssOssService:
                 monthly_rate=80.00,
                 current_balance=45.00,
                 due_date=(datetime.now() + timedelta(days=12)).strftime("%Y-%m-%d"),
-                payment_card_last4="1001",
+                payment_card_last4="1004",
                 email="sam.taylor@example.com",
                 has_active_outage=False,
                 router_status="ONLINE"
             ),
             SubscriberAccount(
-                account_number="ACC-2002",
+                account_number="1005",
                 phone_number="+15550102002",
                 customer_name="Alex Morgan",
                 zip_code="10001",

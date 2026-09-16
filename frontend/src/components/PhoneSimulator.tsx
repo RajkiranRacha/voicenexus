@@ -5,18 +5,19 @@ import {
   Copy, Check, Users, ChevronDown, ChevronUp,
   Headphones, UserCheck, ExternalLink
 } from 'lucide-react';
-import { apiPost } from '../api/client';
+import { apiGet, apiPost } from '../api/client';
 import { useCallWebSocket } from '../hooks/useCallWebSocket';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { TranscriptList } from './shared/TranscriptList';
 import { PRESET_CALLERS, PRESET_UTTERANCES } from '../data/presets';
+import type { Subscriber } from './SubscriberManager';
 
 export const TEST_ACCOUNTS = [
-  { name: "Jordan Rivera", account: "ACC-992014-X", phone: "+15550192834", zip: "94107", email: "jordan.rivera@example.com", balance: "$142.50", scenario: "Billing & payment arrangement" },
-  { name: "Elena Vance", account: "ACC-881230-B", phone: "+15550148821", zip: "98101", email: "elena.vance@example.com", balance: "$0.00", scenario: "Active outage in Seattle & offline router" },
-  { name: "Marcus Brody", account: "ACC-773419-C", phone: "+15550173399", zip: "78701", email: "marcus.brody@example.com", balance: "$220.00", scenario: "Degraded Wi-Fi & remote reboot" },
-  { name: "Sam Taylor", account: "ACC-1001", phone: "+15550101001", zip: "90210", email: "sam.taylor@example.com", balance: "$45.00", scenario: "4-digit account lookup (1001)" },
-  { name: "Alex Morgan", account: "ACC-2002", phone: "+15550102002", zip: "10001", email: "alex.morgan@example.com", balance: "$0.00", scenario: "Zero balance & plan upgrade" }
+  { name: "Jordan Rivera", account: "1001", phone: "+15550192834", zip: "94107", email: "jordan.rivera@example.com", balance: "$142.50", scenario: "Billing & payment arrangement" },
+  { name: "Elena Vance", account: "1002", phone: "+15550148821", zip: "98101", email: "elena.vance@example.com", balance: "$0.00", scenario: "Active outage in Seattle & offline router" },
+  { name: "Marcus Brody", account: "1003", phone: "+15550173399", zip: "78701", email: "marcus.brody@example.com", balance: "$220.00", scenario: "Degraded Wi-Fi & remote reboot" },
+  { name: "Sam Taylor", account: "1004", phone: "+15550101001", zip: "90210", email: "sam.taylor@example.com", balance: "$45.00", scenario: "Pure numeric account lookup (1004)" },
+  { name: "Alex Morgan", account: "1005", phone: "+15550102002", zip: "10001", email: "alex.morgan@example.com", balance: "$0.00", scenario: "Zero balance & plan upgrade" }
 ];
 
 const CsatPrompt: React.FC<{ sessionId: string }> = ({ sessionId }) => {
@@ -58,12 +59,50 @@ const CsatPrompt: React.FC<{ sessionId: string }> = ({ sessionId }) => {
 };
 
 export const PhoneSimulator: React.FC = () => {
+  const [liveSubscribers, setLiveSubscribers] = useState<Subscriber[]>([]);
   const [selectedAni, setSelectedAni] = useState<string>(PRESET_CALLERS[0].ani);
   const [customAni, setCustomAni] = useState<string>("");
   const [inputText, setInputText] = useState<string>('');
   const [autoPlayAudio, setAutoPlayAudio] = useState<boolean>(true);
   const [showCheatSheet, setShowCheatSheet] = useState<boolean>(true);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<Subscriber[]>('/api/admin/subscribers')
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setLiveSubscribers(data);
+        }
+      })
+      .catch((err) => console.error('Failed to load subscribers in PhoneSimulator:', err));
+  }, []);
+
+  const callers = liveSubscribers.length > 0
+    ? [
+        ...liveSubscribers.map((s) => ({
+          name: s.customer_name,
+          ani: s.phone_number,
+          scenario: `Acc: ${s.account_number} | Zip: ${s.zip_code} | $${Number(s.current_balance).toFixed(2)} balance | ${s.router_status}${s.has_active_outage ? ' (Outage)' : ''}`
+        })),
+        {
+          name: "Unregistered Caller (Unknown ANI)",
+          ani: "+15559990000",
+          scenario: "Unknown caller - test finding account by Name, Email, Phone, Zip, or Acc #"
+        }
+      ]
+    : PRESET_CALLERS;
+
+  const cheatSheetAccounts = liveSubscribers.length > 0
+    ? liveSubscribers.map((s) => ({
+        name: s.customer_name,
+        account: s.account_number,
+        phone: s.phone_number,
+        zip: s.zip_code,
+        email: s.email || `${s.customer_name.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+        balance: `$${Number(s.current_balance).toFixed(2)}`,
+        scenario: `${s.plan_name} • Router: ${s.router_status}${s.has_active_outage ? ' • Outage' : ''}`
+      }))
+    : TEST_ACCOUNTS;
 
   const copyOrInsert = (value: string, key: string) => {
     navigator.clipboard.writeText(value);
@@ -131,8 +170,8 @@ export const PhoneSimulator: React.FC = () => {
           {/* Caller Identity Selection */}
           <div className="mt-4 space-y-2">
             <label className="text-xs font-medium text-slate-300">Simulate Inbound Caller (ANI):</label>
-            <div className="space-y-1.5">
-              {PRESET_CALLERS.map((c) => (
+            <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {callers.map((c) => (
                 <button
                   key={c.ani}
                   disabled={call.callState === 'IN_CALL' || call.callState === 'CONNECTING'}
@@ -564,8 +603,8 @@ export const PhoneSimulator: React.FC = () => {
           </p>
 
           {showCheatSheet && (
-            <div className="space-y-2 pt-1">
-              {TEST_ACCOUNTS.map((acc) => (
+            <div className="space-y-2 pt-1 max-h-96 overflow-y-auto pr-1">
+              {cheatSheetAccounts.map((acc) => (
                 <div
                   key={acc.account}
                   className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 text-xs space-y-2 hover:border-slate-700 transition-colors"

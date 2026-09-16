@@ -67,24 +67,20 @@ def extract_digits(text: str) -> str:
 
 def clean_account_number(text: str) -> str:
     """
-    Normalizes spoken or typed account numbers into standard format.
-    E.g. 'acc 992014 x' -> 'ACC-992014-X'
-         '1001' -> 'ACC-1001'
-         'ACC-992014-X' -> 'ACC-992014-X'
+    Normalizes spoken or typed account numbers into simple numeric format.
+    E.g. '1001' -> '1001'
+         'acc 1001' -> '1001'
+         'ACC-1001' -> '1001'
+         'one zero zero one' -> '1001'
     """
     if not text:
         return ""
+    digits = extract_digits(text)
+    if digits:
+        return digits
     normalized = normalize_spoken_digits(text).upper()
     cleaned = re.sub(r"[^A-Z0-9]", "", normalized)
-    if cleaned.startswith("ACC"):
-        body = cleaned[3:]
-        if len(body) > 1 and body[-1].isalpha():
-            return f"ACC-{body[:-1]}-{body[-1]}"
-        elif body:
-            return f"ACC-{body}"
-    elif cleaned.isdigit():
-        return f"ACC-{cleaned}"
-    return text.strip().upper()
+    return cleaned or text.strip().upper()
 
 def clean_zip_code(text: str) -> str:
     """Extracts a 5-digit US zip code from spoken or typed text."""
