@@ -2,9 +2,10 @@ import React, { useState, useRef } from 'react';
 import {
   Headphones, ShieldCheck, UserCheck,
   MessageSquare, CheckCircle2, Sparkles, Inbox, Radio, Lightbulb,
-  Mic, MicOff, PhoneOff, Volume2, Send, AlertCircle
+  Mic, MicOff, PhoneOff, Volume2, Send, AlertCircle, PhoneForwarded
 } from 'lucide-react';
 import { useAgentWebSocket } from '../hooks/useAgentWebSocket';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { getNextBestAction } from '../lib/nextBestAction';
 import { TranscriptList } from './shared/TranscriptList';
 import { MicStatusBadge } from './shared/MicStatusBadge';
@@ -12,15 +13,38 @@ import { MicStatusBadge } from './shared/MicStatusBadge';
 export const AgentDesktop: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ESCALATIONS' | 'LIVE_STREAM'>('ESCALATIONS');
   const [agentSpeechText, setAgentSpeechText] = useState<string>('');
+  const [forwardPhone, setForwardPhone] = useState<string>('');
+  const [showForwardInput, setShowForwardInput] = useState<boolean>(false);
+  const [forwardSent, setForwardSent] = useState<boolean>(false);
+  const [agentMicInterim, setAgentMicInterim] = useState<string>('');
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const agent = useAgentWebSocket(remoteAudioRef);
+
+  const agentSpeechRec = useSpeechRecognition(
+    'en-US',
+    (interim) => setAgentMicInterim(interim),
+    (finalText) => {
+      setAgentMicInterim('');
+      if (finalText.trim()) {
+        agent.sendAgentLiveSpeech(finalText);
+      }
+    }
+  );
 
   const activeLiveSessions = Object.keys(agent.liveCalls);
 
   const handleSendAgentSpeech = () => {
     agent.sendAgentLiveSpeech(agentSpeechText);
     setAgentSpeechText('');
+  };
+
+  const handleForwardCall = () => {
+    if (forwardPhone.trim()) {
+      agent.transferCallToPhone(forwardPhone);
+      setForwardSent(true);
+      setTimeout(() => setForwardSent(false), 5000);
+    }
   };
 
   return (
@@ -219,7 +243,14 @@ export const AgentDesktop: React.FC = () => {
                           </span>
                         </div>
                         <div className="flex items-center space-x-2 text-xs">
-                          <MicStatusBadge isActive={agent.isMicActive} isMuted={agent.isMuted} label="Microphone" />
+                          {agent.isCallerSpeaking && (
+                            <span className="px-2 py-0.5 rounded-lg bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center space-x-1 animate-pulse font-semibold">
+                              <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-bounce" />
+                              <span>Customer Speaking...</span>
+                            </span>
+                          )}
+
+                          <MicStatusBadge isActive={agent.isMicActive || agentSpeechRec.isListening} isMuted={agent.isMuted} label="Microphone" />
 
                           <span className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center space-x-1.5 ${
                             agent.isAudioConnected ? 'bg-cyan-950 text-cyan-300 border-cyan-800' :
@@ -229,16 +260,21 @@ export const AgentDesktop: React.FC = () => {
                           }`}>
                             <Volume2 className="w-3 h-3 text-cyan-400" />
                             <span>
-                              {agent.isAudioConnected ? 'Two-Way Audio: Connected' :
-                               agent.webrtcConnectionState === 'connecting' ? 'Audio: Establishing P2P...' :
-                               agent.webrtcConnectionState === 'failed' ? 'NAT Traversal Failed' :
-                               'Audio Stream: Initializing...'}
+                              {agent.isTelephonyCall
+                                ? 'Telephony Voice Bridge: Connected (PSTN / Mobile)'
+                                : agent.isAudioConnected
+                                ? 'Two-Way Audio: Connected'
+                                : agent.webrtcConnectionState === 'connecting'
+                                ? 'Audio: Establishing P2P...'
+                                : agent.webrtcConnectionState === 'failed'
+                                ? 'NAT Traversal Failed'
+                                : 'Audio Stream: Initializing...'}
                             </span>
                           </span>
                         </div>
                       </div>
 
-                      {agent.webrtcConnectionState === 'failed' && (
+                      {!agent.isTelephonyCall && agent.webrtcConnectionState === 'failed' && (
                         <div className="text-[11px] text-rose-300 bg-rose-950/70 border border-rose-800/80 rounded-lg p-2.5 flex items-start space-x-2">
                           <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
                           <div>
@@ -258,7 +294,7 @@ export const AgentDesktop: React.FC = () => {
                       <div className="pt-2 border-t border-emerald-900/50 space-y-2">
                         <div className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
                           <span>Speak to Caller / Quick Handoff Responses:</span>
-                          <span className="text-[10px] text-slate-400">Streams voice & text directly to customer's ear</span>
+                          <span className="text-[10px] text-slate-400">Streams voice & text directly to customer's phone</span>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -279,7 +315,28 @@ export const AgentDesktop: React.FC = () => {
                           ))}
                         </div>
 
+                        {agentMicInterim && (
+                          <div className="text-[11px] text-emerald-300 bg-emerald-950/60 border border-emerald-800/60 rounded-lg p-2 flex items-center space-x-1.5 animate-pulse">
+                            <Mic className="w-3.5 h-3.5 text-emerald-400 animate-bounce" />
+                            <span>Heard: "{agentMicInterim}"</span>
+                          </div>
+                        )}
+
                         <div className="flex space-x-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={agentSpeechRec.toggleListening}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shrink-0 ${
+                              agentSpeechRec.isListening
+                                ? 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse shadow-md shadow-rose-950/40'
+                                : 'bg-emerald-700 hover:bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                            }`}
+                            title={agentSpeechRec.isListening ? 'Click to stop listening' : 'Click to speak to caller using laptop microphone'}
+                          >
+                            <Mic className="w-3.5 h-3.5" />
+                            <span>{agentSpeechRec.isListening ? 'Listening...' : 'Speak via Mic'}</span>
+                          </button>
+
                           <input
                             type="text"
                             value={agentSpeechText}
@@ -297,6 +354,38 @@ export const AgentDesktop: React.FC = () => {
                             <Send className="w-3.5 h-3.5" />
                             <span>Transmit</span>
                           </button>
+                        </div>
+
+                        {/* Phone Bridging Section */}
+                        <div className="pt-2 border-t border-emerald-900/40">
+                          <button
+                            type="button"
+                            onClick={() => setShowForwardInput(prev => !prev)}
+                            className="text-[11px] text-slate-400 hover:text-cyan-300 flex items-center space-x-1 underline cursor-pointer"
+                          >
+                            <PhoneForwarded className="w-3 h-3 text-cyan-400" />
+                            <span>{showForwardInput ? 'Hide Phone Forwarding' : 'Bridge Call to Human Agent Phone Number (PSTN)'}</span>
+                          </button>
+                          {showForwardInput && (
+                            <div className="flex items-center space-x-2 mt-2">
+                              <input
+                                type="tel"
+                                value={forwardPhone}
+                                onChange={(e) => setForwardPhone(e.target.value)}
+                                placeholder="Enter agent phone (e.g. +91... or +1...)"
+                                className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                              />
+                              <button
+                                type="button"
+                                disabled={!forwardPhone.trim()}
+                                onClick={handleForwardCall}
+                                className="px-3.5 py-1.5 bg-cyan-700 hover:bg-cyan-600 disabled:opacity-40 text-white rounded-lg text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer"
+                              >
+                                <PhoneForwarded className="w-3 h-3" />
+                                <span>{forwardSent ? 'Forwarding Triggered!' : 'Dial & Bridge'}</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -30,13 +30,17 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
   const [activeCallSessionId, setActiveCallSessionId] = useState<string | null>(null);
   const [isAudioConnected, setIsAudioConnected] = useState<boolean>(false);
   const [isAutoplayBlocked, setIsAutoplayBlocked] = useState<boolean>(false);
+  const [isCallerSpeaking, setIsCallerSpeaking] = useState<boolean>(false);
   const [iceServers, setIceServers] = useState<RTCIceServer[] | undefined>(undefined);
 
   const wsRef = useRef<WebSocket | null>(null);
   const activeCallSessionIdRef = useRef<string | null>(null);
+  const acceptedCallsRef = useRef<string[]>([]);
   const remoteStreamRef = useRef<MediaStream | null>(null);
+  const callerSpeakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { activeCallSessionIdRef.current = activeCallSessionId; }, [activeCallSessionId]);
+  useEffect(() => { acceptedCallsRef.current = acceptedCalls; }, [acceptedCalls]);
 
   // Fetch dynamic WebRTC ICE configuration (STUN/TURN) from backend
   useEffect(() => {
@@ -101,10 +105,18 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
     }
   });
 
-  // Track WebRTC connection state
+  const isTelephonyCall = Boolean(
+    activeCallSessionId?.startsWith('vapi-') || activeCallSessionId?.startsWith('twilio-')
+  );
+
+  // Track connection state: Telephony Voice Bridge (PSTN/cellular) or WebRTC P2P (browser)
   useEffect(() => {
-    setIsAudioConnected(webrtc.connectionState === 'connected');
-  }, [webrtc.connectionState]);
+    if (isTelephonyCall) {
+      setIsAudioConnected(Boolean(activeCallSessionId));
+    } else {
+      setIsAudioConnected(webrtc.connectionState === 'connected');
+    }
+  }, [webrtc.connectionState, isTelephonyCall, activeCallSessionId]);
 
   const endActiveCall = useCallback(() => {
     const sessionId = activeCallSessionIdRef.current;
@@ -205,6 +217,36 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
                 const existing = prev[sessId] || { turns: [] };
                 return { ...prev, [sessId]: { ...existing, turns: [...existing.turns, callerTurn] } };
               });
+
+              // Voice exchange: play caller voice through agent laptop speakers
+              const isCallActiveWithAgent =
+                sessId === activeCallSessionIdRef.current || acceptedCallsRef.current.includes(sessId);
+
+              if (isCallActiveWithAgent) {
+                setIsCallerSpeaking(true);
+                if (callerSpeakingTimerRef.current) clearTimeout(callerSpeakingTimerRef.current);
+                callerSpeakingTimerRef.current = setTimeout(() => setIsCallerSpeaking(false), 3200);
+
+                if (data.audio_base64) {
+                  try {
+                    const audio = new Audio(`data:audio/mp3;base64,${data.audio_base64}`);
+                    audio.play().catch(() => {
+                      if ('speechSynthesis' in window) {
+                        const utter = new SpeechSynthesisUtterance(data.text);
+                        window.speechSynthesis.speak(utter);
+                      }
+                    });
+                  } catch {
+                    if ('speechSynthesis' in window) {
+                      const utter = new SpeechSynthesisUtterance(data.text);
+                      window.speechSynthesis.speak(utter);
+                    }
+                  }
+                } else if ('speechSynthesis' in window) {
+                  const utter = new SpeechSynthesisUtterance(data.text);
+                  window.speechSynthesis.speak(utter);
+                }
+              }
             }
           } else if (data.type === 'CALL_ENDED') {
             if (data.session_id) {
@@ -288,6 +330,17 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
     });
   }, [activeCallSessionId]);
 
+  const transferCallToPhone = useCallback((phoneNumber: string) => {
+    const sessionId = activeCallSessionIdRef.current;
+    if (sessionId && phoneNumber.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'AGENT_TRANSFER_PHONE',
+        session_id: sessionId,
+        phone_number: phoneNumber.trim()
+      }));
+    }
+  }, []);
+
   return {
     escalations, selectedEscalation, setSelectedEscalation,
     acceptedCalls, isConnected,
@@ -295,11 +348,13 @@ export function useAgentWebSocket(remoteAudioRef: RefObject<HTMLAudioElement | n
     activeCallSessionId,
     isMicActive: webrtc.isMicActive, isMuted: webrtc.isMuted, micError: webrtc.micError,
     isAudioConnected,
+    isCallerSpeaking,
+    isTelephonyCall,
     webrtcConnectionState: webrtc.connectionState,
     iceConnectionState: webrtc.iceConnectionState,
     isAutoplayBlocked,
     unlockAudio,
     toggleMute: webrtc.toggleMute,
-    acceptCall, endActiveCall, sendAgentLiveSpeech,
+    acceptCall, endActiveCall, sendAgentLiveSpeech, transferCallToPhone,
   };
 }
