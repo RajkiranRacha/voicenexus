@@ -209,6 +209,8 @@ class SubscriberUpsertRequest(BaseModel):
     phone_number: str
     customer_name: str
     zip_code: str
+    email: Optional[str] = "customer@example.com"
+    payment_card_last4: Optional[str] = "4242"
     address: Optional[str] = "100 Fiber Way"
     plan_name: Optional[str] = "GigaFiber 500 Ultra"
     monthly_rate: Optional[float] = 80.0

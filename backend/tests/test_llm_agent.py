@@ -39,7 +39,7 @@ async def test_llm_agent_tools_execution():
     # 2b. lookup_account by customer name
     name_res = await agent._execute_tool("lookup_account", {"identifier": "Elena Vance"})
     assert name_res["found"] is True
-    assert name_res["account_number"] == "ACC-881230-B"
+    assert name_res["account_number"] == "1002"
 
     # 2c. lookup_account by email
     email_res = await agent._execute_tool("lookup_account", {"identifier": "sam.taylor@example.com"})
@@ -47,7 +47,7 @@ async def test_llm_agent_tools_execution():
     assert email_res["customer_name"] == "Sam Taylor"
 
     # 2d. lookup_account by 4-digit account number
-    acc4_res = await agent._execute_tool("lookup_account", {"identifier": "1001"})
+    acc4_res = await agent._execute_tool("lookup_account", {"identifier": "1004"})
     assert acc4_res["found"] is True
     assert acc4_res["customer_name"] == "Sam Taylor"
 
