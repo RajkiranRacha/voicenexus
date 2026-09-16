@@ -21,7 +21,10 @@ async def call_websocket_endpoint(websocket: WebSocket):
             data = json.loads(raw_data)
             msg_type = data.get("type")
 
-            if msg_type == "START_CALL":
+            if msg_type == "PING":
+                await websocket.send_text(json.dumps({"type": "PONG", "timestamp": data.get("timestamp")}))
+
+            elif msg_type == "START_CALL":
                 ani = data.get("ani", config.DEFAULT_DEMO_ANI)
                 orchestrator = DialogueOrchestrator(session_id, ani)
                 agent_hub.register_caller(session_id, websocket)

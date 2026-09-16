@@ -168,7 +168,11 @@ def test_vapi_transfer_to_agent_escalation():
 
     # Verify escalation was stored in agent_hub
     pending = agent_hub.get_pending()
-    assert any("call-vapi-esc-1" in p["session_id"] for p in pending)
+    esc_item = next((p for p in pending if "call-vapi-esc-1" in p["session_id"]), None)
+    assert esc_item is not None
+    assert esc_item["call_context"].get("primary_intent") == "AGENT_ESCALATION"
+    assert "customer_name" in esc_item["customer_profile"]
+    assert "notes" in esc_item["resolution_summary"]
 
     # Clean up so singleton state doesn't affect other tests
     agent_hub._pending_escalations.pop("vapi-call-vapi-esc-1", None)

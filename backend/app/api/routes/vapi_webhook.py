@@ -230,17 +230,40 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         cust_name = matched_acc.customer_name if matched_acc else "Caller"
         acc_id = matched_acc.account_number if matched_acc else "UNREGISTERED"
 
+        cust_profile = {
+            "account_number": acc_id,
+            "customer_name": cust_name,
+            "auth_status": matched_acc.auth_status.value if matched_acc else "UNAUTHENTICATED",
+            "auth_method": "ANI_PASSIVE_MATCH" if matched_acc else "NONE",
+            "phone_number": caller_ani,
+            "source": "vapi_phone"
+        }
+        if matched_acc:
+            dumped = matched_acc.model_dump()
+            dumped["auth_status"] = matched_acc.auth_status.value if hasattr(matched_acc.auth_status, 'value') else str(matched_acc.auth_status)
+            cust_profile.update(dumped)
+
         escalation_payload = EscalationPayload(
             session_id=session_id,
             ani=caller_ani,
-            customer_profile={
-                "customer_name": cust_name,
-                "account_number": acc_id,
-                "phone": caller_ani,
-                "source": "vapi_phone"
+            customer_profile=cust_profile,
+            call_context={
+                "primary_intent": "AGENT_ESCALATION",
+                "intent_confidence": 0.95,
+                "duration_in_ivr_seconds": 30,
+                "turns_count": 4,
+                "caller_intent": "AGENT_ESCALATION",
+                "provider": "vapi"
             },
-            call_context={"caller_intent": "AGENT_ESCALATION", "provider": "vapi"},
-            resolution_summary={"failure_or_escalation_reason": reason},
+            resolution_summary={
+                "status": "ESCALATED",
+                "intent": "AGENT_ESCALATION",
+                "attempted_action": "LIVE_AGENT_ESCALATION",
+                "current_balance": matched_acc.current_balance if matched_acc else 0.0,
+                "failure_or_escalation_reason": reason,
+                "notes": f"Vapi call escalated: {reason}",
+                "flow_step": "AGENT_HANDOFF"
+            },
             recommended_agent_queue="tier2_human_specialist",
             transcript_snippet=[{"speaker": "system", "text": f"Vapi call escalated: {reason}"}]
         )

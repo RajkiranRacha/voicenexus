@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Phone, PhoneOff, Mic, MicOff, Volume2, Radio,
   Send, ShieldCheck, Zap, Globe, Star,
-  Copy, Check, Users, ChevronDown, ChevronUp
+  Copy, Check, Users, ChevronDown, ChevronUp,
+  Headphones, UserCheck, ExternalLink
 } from 'lucide-react';
 import { apiPost } from '../api/client';
 import { useCallWebSocket } from '../hooks/useCallWebSocket';
@@ -327,6 +328,50 @@ export const PhoneSimulator: React.FC = () => {
           </div>
         ) : null}
 
+        {/* Escalated to Live Agent Queue Banner */}
+        {call.callState === 'ESCALATED' && !call.connectedAgent && (
+          <div className="bg-indigo-950/70 border border-indigo-700/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs shadow-xl shadow-indigo-950/40 animate-pulse">
+            <div className="flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600/30 text-indigo-400 flex items-center justify-center font-bold">
+                <Headphones className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <div className="font-bold text-indigo-200 flex items-center space-x-2">
+                  <span>Call Escalated to Live Care Specialist</span>
+                  <span className="bg-indigo-800/80 text-indigo-100 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                    In Priority Queue
+                  </span>
+                </div>
+                <div className="text-[11px] text-indigo-300/80 mt-0.5">
+                  AI handoff complete. Handoff context & verified records sent to Tier 2 specialist (Sarah J.).
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => window.open('/agent', '_blank')}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
+                title="Open Agent Workspace in a separate tab to accept call"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Open Agent Tab</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={call.acceptAsAgent}
+                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-md shadow-emerald-950/50 transition-all cursor-pointer"
+                title="Answer call as care specialist immediately"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-white" />
+                <span>Answer Call as Agent</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Connected to Live Agent Banner */}
         {call.connectedAgent && (
           <div className="bg-emerald-950/60 border border-emerald-800/90 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs shadow-lg shadow-emerald-950/30">
@@ -461,7 +506,7 @@ export const PhoneSimulator: React.FC = () => {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendUtterance(inputText)}
-                placeholder={call.callState === 'IN_CALL' ? (call.awaitingResponse ? "Waiting for VoiceNexus to respond..." : "Speak or type as caller (e.g., 'How much is my bill?')...") : "Start call to speak"}
+                placeholder={call.callState === 'IN_CALL' ? (call.awaitingResponse ? "Waiting for VoiceNexus to respond..." : "Speak or type as caller (e.g., 'How much is my bill?')...") : call.callState === 'ESCALATED' ? "Call transferred: In queue for live care specialist (click Answer above)..." : "Start call to speak"}
                 className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
               />
               <button

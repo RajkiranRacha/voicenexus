@@ -113,7 +113,7 @@ export const AgentDesktop: React.FC = () => {
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-bold text-slate-200">
-                          {esc.customer_profile.customer_name}
+                          {esc.customer_profile?.customer_name || 'Unregistered Caller'}
                         </span>
                         <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
                           isAccepted ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'
@@ -122,11 +122,11 @@ export const AgentDesktop: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-slate-400 text-[11px] truncate">
-                        {esc.call_context.primary_intent}
+                        {esc.call_context?.primary_intent || 'AGENT_ESCALATION'}
                       </div>
                       <div className="flex items-center justify-between mt-2 text-[10px] text-slate-500">
-                        <span>Queue: {esc.recommended_agent_queue}</span>
-                        <span>{esc.call_context.duration_in_ivr_seconds}s in IVR</span>
+                        <span>Queue: {esc.recommended_agent_queue || 'General Tier 2'}</span>
+                        <span>{esc.call_context?.duration_in_ivr_seconds ?? 0}s in IVR</span>
                       </div>
                     </button>
                   );
@@ -145,15 +145,15 @@ export const AgentDesktop: React.FC = () => {
                     <div>
                       <div className="flex items-center space-x-2">
                         <h3 className="text-base font-bold text-slate-100">
-                          {agent.selectedEscalation.customer_profile.customer_name}
+                          {agent.selectedEscalation.customer_profile?.customer_name || 'Unregistered Caller'}
                         </h3>
                         <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center space-x-1 font-semibold">
                           <ShieldCheck className="w-3 h-3" />
-                          <span>{agent.selectedEscalation.customer_profile.auth_status}</span>
+                          <span>{agent.selectedEscalation.customer_profile?.auth_status || 'UNAUTHENTICATED'}</span>
                         </span>
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
-                        ANI: {agent.selectedEscalation.ani} · Account: {agent.selectedEscalation.customer_profile.account_number}
+                        ANI: {agent.selectedEscalation.ani} · Account: {agent.selectedEscalation.customer_profile?.account_number || 'UNREGISTERED'}
                       </div>
                     </div>
 
@@ -215,7 +215,7 @@ export const AgentDesktop: React.FC = () => {
                         <div className="flex items-center space-x-2">
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                           <span className="text-xs font-bold text-emerald-300">
-                            Voice Call Active with Customer ({agent.selectedEscalation.customer_profile.customer_name})
+                            Voice Call Active with Customer ({agent.selectedEscalation.customer_profile?.customer_name || 'Customer'})
                           </span>
                         </div>
                         <div className="flex items-center space-x-2 text-xs">
@@ -263,7 +263,7 @@ export const AgentDesktop: React.FC = () => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                           {[
-                            `Hello ${agent.selectedEscalation.customer_profile.customer_name}, my name is Sarah. I see your verified details here and can assist you right away.`,
+                            `Hello ${agent.selectedEscalation.customer_profile?.customer_name || 'there'}, my name is Sarah. I see your verified details here and can assist you right away.`,
                             "I have reviewed your billing arrangement. Let's get this scheduled for you.",
                             "Our technicians are currently addressing the fiber node in your area. Service will restore shortly.",
                             "I can apply the promotional Gigabit upgrade to your account with free equipment."
@@ -312,34 +312,34 @@ export const AgentDesktop: React.FC = () => {
                       <div>
                         <div className="text-slate-400 text-[11px]">Primary Intent</div>
                         <div className="font-semibold text-slate-200">
-                          {agent.selectedEscalation.call_context.primary_intent}
+                          {agent.selectedEscalation.call_context?.primary_intent || 'AGENT_ESCALATION'}
                         </div>
                       </div>
                       <div>
                         <div className="text-slate-400 text-[11px]">Escalation Reason</div>
                         <div className="font-semibold text-amber-300">
-                          {agent.selectedEscalation.resolution_summary.failure_or_escalation_reason}
+                          {agent.selectedEscalation.resolution_summary?.failure_or_escalation_reason || 'Live Agent Requested'}
                         </div>
                       </div>
                       <div>
                         <div className="text-slate-400 text-[11px]">Current Balance</div>
                         <div className="font-semibold text-slate-200">
-                          ${agent.selectedEscalation.resolution_summary.current_balance?.toFixed(2) || '0.00'}
+                          ${agent.selectedEscalation.resolution_summary?.current_balance?.toFixed(2) || '0.00'}
                         </div>
                       </div>
                     </div>
                     <div className="text-xs text-slate-300 pt-1 border-t border-indigo-900/40">
                       <span className="text-slate-400 font-medium">Notes: </span>
-                      {agent.selectedEscalation.resolution_summary.notes}
+                      {agent.selectedEscalation.resolution_summary?.notes || 'Customer escalated to live human agent.'}
                     </div>
                   </div>
 
                   {/* AI Next-Best-Action Guidance (VN-10) */}
                   {(() => {
                     const nba = getNextBestAction(
-                      agent.selectedEscalation.call_context.primary_intent,
-                      agent.selectedEscalation.resolution_summary.current_balance || 0,
-                      agent.selectedEscalation.resolution_summary.failure_or_escalation_reason || ""
+                      agent.selectedEscalation.call_context?.primary_intent || 'AGENT_ESCALATION',
+                      agent.selectedEscalation.resolution_summary?.current_balance || 0,
+                      agent.selectedEscalation.resolution_summary?.failure_or_escalation_reason || ""
                     );
                     return (
                       <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-1.5 text-xs">

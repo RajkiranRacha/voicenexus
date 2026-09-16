@@ -1,6 +1,7 @@
 import json
 import uuid
 import re
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 import httpx
 
@@ -119,6 +120,7 @@ class LLMAgent:
         self.should_close_call: bool = False
         self.language: str = config.LANGUAGE
         self.history: List[Dict[str, Any]] = []
+        self.start_time = datetime.now()
 
         # Attempt initial ANI match if account was not already supplied
         if not self.account and self.ani:
@@ -235,16 +237,42 @@ class LLMAgent:
                 for m in self.history if m.get("content") and m["role"] in ("user", "assistant")
             ]
 
+            acc = self.account or bss_service.get_account_by_phone(self.ani)
+            cust_profile = {
+                "account_number": acc.account_number if acc else "UNREGISTERED",
+                "customer_name": acc.customer_name if acc else "Unknown Caller",
+                "auth_status": acc.auth_status.value if acc else AuthStatus.UNAUTHENTICATED.value,
+                "auth_method": "ANI_PASSIVE_MATCH" if acc else "NONE",
+                "phone_number": self.ani
+            }
+            if acc:
+                dumped = acc.model_dump()
+                dumped["auth_status"] = acc.auth_status.value if hasattr(acc.auth_status, 'value') else str(acc.auth_status)
+                cust_profile.update(dumped)
+
+            duration_sec = int((datetime.now() - self.start_time).total_seconds()) if hasattr(self, 'start_time') else 25
+
             self.escalation_payload = EscalationPayload(
                 session_id=self.session_id,
                 ani=self.ani,
-                customer_profile=self.account.model_dump() if self.account else {"status": "UNAUTHENTICATED"},
-                call_context={"ani": self.ani, "language": self.language},
+                customer_profile=cust_profile,
+                call_context={
+                    "primary_intent": "AGENT_ESCALATION",
+                    "intent_confidence": 0.95,
+                    "duration_in_ivr_seconds": duration_sec,
+                    "turns_count": len(self.history),
+                    "ani": self.ani,
+                    "language": self.language
+                },
                 resolution_summary={
                     "status": "ESCALATED",
                     "intent": "AGENT_ESCALATION",
+                    "attempted_action": "LIVE_AGENT_ESCALATION",
+                    "current_balance": acc.current_balance if acc else 0.0,
                     "failure_or_escalation_reason": reason,
-                    "summary": f"Escalated to live agent: {reason}"
+                    "notes": f"Escalated to human agent: {reason}",
+                    "summary": f"Escalated to live agent: {reason}",
+                    "flow_step": "AGENT_HANDOFF"
                 },
                 recommended_agent_queue="Tier 2 Customer Care",
                 transcript_snippet=transcript_snippet
