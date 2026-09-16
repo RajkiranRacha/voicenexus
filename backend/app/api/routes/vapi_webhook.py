@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 import logging
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Request, Response
@@ -7,6 +8,8 @@ from app.services.bss_oss import bss_service
 from app.services.agent_hub import agent_hub
 from app.services.telemetry import telemetry_service
 from app.services.sms_service import sms_service
+from app.services.tts import tts_service
+from app.services.vapi_adapter import VapiCallerAdapter
 from app.db.database import db
 from app.models.schemas import EscalationPayload, DialogueTurn, LatencyMetrics
 
@@ -51,23 +54,40 @@ def search_kb(query: str) -> str:
 # In-memory session context for active Vapi calls
 _vapi_sessions: Dict[str, Dict[str, Any]] = {}
 
-def get_or_create_session(session_id: str, caller_ani: str = "") -> Dict[str, Any]:
-    """Retrieves or creates session context for multi-turn Vapi calls."""
+def get_or_create_session(session_id: str, caller_ani: str = "", call_id: str = "", control_url: str = "") -> Dict[str, Any]:
+    """Retrieves or creates session context and registers VapiCallerAdapter for multi-turn Vapi calls."""
     if session_id not in _vapi_sessions:
         matched_acc = bss_service.get_account_by_phone(caller_ani) if caller_ani else None
+        adapter = VapiCallerAdapter(session_id=session_id, call_id=call_id, control_url=control_url)
+        agent_hub.register_caller(session_id, adapter)
         _vapi_sessions[session_id] = {
             "session_id": session_id,
+            "call_id": call_id,
+            "control_url": control_url,
             "caller_ani": caller_ani,
             "account": matched_acc,
             "primary_intent": "TELECOM_CARE",
             "escalated": False,
             "escalation_reason": None,
             "turns_count": 0,
+            "adapter": adapter,
         }
-    elif caller_ani and not _vapi_sessions[session_id].get("caller_ani"):
-        _vapi_sessions[session_id]["caller_ani"] = caller_ani
-        if not _vapi_sessions[session_id].get("account"):
-            _vapi_sessions[session_id]["account"] = bss_service.get_account_by_phone(caller_ani)
+    else:
+        sess = _vapi_sessions[session_id]
+        if caller_ani and not sess.get("caller_ani"):
+            sess["caller_ani"] = caller_ani
+            if not sess.get("account"):
+                sess["account"] = bss_service.get_account_by_phone(caller_ani)
+        if control_url and not sess.get("control_url"):
+            sess["control_url"] = control_url
+            if sess.get("adapter"):
+                sess["adapter"].control_url = control_url
+        if call_id and not sess.get("call_id"):
+            sess["call_id"] = call_id
+            if sess.get("adapter"):
+                sess["adapter"].call_id = call_id
+        if sess.get("adapter"):
+            agent_hub.register_caller(session_id, sess["adapter"])
     return _vapi_sessions[session_id]
 
 
@@ -84,11 +104,14 @@ async def vapi_webhook(request: Request):
 
     message = payload.get("message", {})
     msg_type = message.get("type")
-    call = message.get("call", {})
+    call = message.get("call", {}) or payload.get("call", {})
     call_id = call.get("id", "vapi-call")
     session_id = f"vapi-{call_id}"
     customer_ani = call.get("customer", {}).get("number") or ""
-    session_ctx = get_or_create_session(session_id, customer_ani)
+    monitor = call.get("monitor", {}) or message.get("monitor", {}) or payload.get("monitor", {})
+    control_url = monitor.get("controlUrl") or ""
+
+    session_ctx = get_or_create_session(session_id, customer_ani, call_id=call_id, control_url=control_url)
     session_ctx["turns_count"] += 1
 
     # 1. TOOL CALLS: Vapi assistant wants to execute backend actions
@@ -134,9 +157,28 @@ async def vapi_webhook(request: Request):
             metadata = {
                 "ani": customer_ani,
                 "session_id": session_id,
-                "provider": "vapi"
+                "provider": "vapi",
+                "is_escalated": session_ctx.get("escalated", False)
             }
             await agent_hub.broadcast_transcript_turn(session_id, turn, metadata)
+
+            # If the caller spoke, relay speech and synthesized audio to agent desktop
+            if role == "user" and text.strip():
+                audio_b64 = None
+                try:
+                    mp3_bytes = await tts_service.synthesize_to_bytes(text)
+                    audio_b64 = base64.b64encode(mp3_bytes).decode("utf-8")
+                except Exception as e:
+                    logger.debug(f"[Vapi] Caller speech TTS synthesis error: {e}")
+
+                await agent_hub.relay_caller_to_agent(session_id, {
+                    "type": "CALLER_LIVE_SPEECH",
+                    "session_id": session_id,
+                    "text": text,
+                    "audio_base64": audio_b64,
+                    "provider": "vapi",
+                    "caller_ani": customer_ani
+                })
         return {"status": "ok"}
 
     # 4. END OF CALL REPORT: Save CDR, trigger analytics & SMS
@@ -146,6 +188,8 @@ async def vapi_webhook(request: Request):
         summary = message.get("summary", "Vapi cellular call completed.")
 
         sess = _vapi_sessions.pop(session_id, {})
+        agent_hub.unregister_caller(session_id)
+        await agent_hub.relay_caller_to_agent(session_id, {"type": "CALL_ENDED", "session_id": session_id})
         acc = sess.get("account") or (bss_service.get_account_by_phone(customer_ani) if customer_ani else None)
         acc_num = acc.account_number if acc else "UNREGISTERED"
         cust_name = acc.customer_name if acc else "Unknown Caller"
@@ -377,16 +421,18 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
             transcript_snippet=[{"speaker": "system", "text": f"Vapi call escalated: {reason}"}]
         )
         await agent_hub.broadcast_escalation(escalation_payload)
+        if session_ctx.get("adapter"):
+            agent_hub.register_caller(session_id, session_ctx["adapter"])
 
         if online:
             return (
-                "Transferring call now. I have alerted our care specialist on the desktop portal. "
+                "Please hold for just a moment while I transfer your call to our care specialist. "
                 "They have your account details and are answering right now."
             )
         else:
             return (
                 "I have prioritized your request and alerted our care specialist on the desktop portal. "
-                "They have received your account details and live transcript."
+                "Please hold for the next available specialist."
             )
 
     return f"Tool {name} executed successfully."

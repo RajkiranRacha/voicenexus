@@ -77,6 +77,9 @@ class VoiceNexusConfig(BaseModel):
     GROQ_WHISPER_MODEL: str = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    VAPI_API_KEY: str = os.getenv("VAPI_API_KEY", "")
+    VAPI_PHONE_NUMBER: str = os.getenv("VAPI_PHONE_NUMBER", "")
+    AGENT_FORWARDING_PHONE: str = os.getenv("AGENT_FORWARDING_PHONE", "")
 
     # WebRTC / NAT Traversal Configuration
     TURN_SERVER_URL: str = os.getenv("TURN_SERVER_URL", "")
@@ -160,6 +163,12 @@ def load_persisted_config():
         config.GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
     if "OPENAI_API_KEY" in os.environ:
         config.OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+    if "VAPI_API_KEY" in os.environ:
+        config.VAPI_API_KEY = os.environ["VAPI_API_KEY"]
+    if "VAPI_PHONE_NUMBER" in os.environ:
+        config.VAPI_PHONE_NUMBER = os.environ["VAPI_PHONE_NUMBER"]
+    if "AGENT_FORWARDING_PHONE" in os.environ:
+        config.AGENT_FORWARDING_PHONE = os.environ["AGENT_FORWARDING_PHONE"]
     if "TURN_SERVER_URL" in os.environ:
         config.TURN_SERVER_URL = os.environ["TURN_SERVER_URL"]
     if "TURN_USERNAME" in os.environ:
