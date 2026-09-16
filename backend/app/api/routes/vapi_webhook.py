@@ -64,7 +64,7 @@ async def vapi_webhook(request: Request):
     call = message.get("call", {})
     call_id = call.get("id", "vapi-call")
     session_id = f"vapi-{call_id}"
-    customer_ani = call.get("customer", {}).get("number", "+15550192834")
+    customer_ani = call.get("customer", {}).get("number") or ""
 
     # 1. TOOL CALLS: Vapi assistant wants to execute backend actions
     if msg_type == "tool-calls":
@@ -160,20 +160,36 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
     from app.utils.speech_normalizer import clean_account_number, clean_zip_code
 
     if name == "lookup_account":
-        raw_acc = args.get("account_number")
-        phone = args.get("phone_number") or caller_ani
-        raw_zip = args.get("zip_code")
-
-        acc_num = clean_account_number(raw_acc) if raw_acc else None
-        zip_c = clean_zip_code(raw_zip) if raw_zip else None
+        raw_acc = (
+            args.get("account_number")
+            or args.get("accountNumber")
+            or args.get("account")
+            or args.get("account_id")
+            or args.get("identifier")
+            or args.get("id")
+        )
+        phone = args.get("phone_number") or args.get("phoneNumber") or args.get("phone")
+        raw_zip = args.get("zip_code") or args.get("zipCode") or args.get("zip")
 
         acc = None
-        if acc_num:
-            acc = bss_service.get_account_by_number(acc_num)
+        if raw_acc is not None and str(raw_acc).strip():
+            acc_str = str(raw_acc).strip()
+            acc_num = clean_account_number(acc_str)
+            acc = (
+                bss_service.get_account_by_number(acc_num)
+                or bss_service.get_account_by_number(acc_str)
+                or bss_service.get_account_by_phone(acc_str)
+                or bss_service.get_account_by_name(acc_str)
+                or bss_service.get_account_by_zip(acc_str)
+                or bss_service.get_account_by_email(acc_str)
+            )
         if not acc and phone:
-            acc = bss_service.get_account_by_phone(phone)
-        if not acc and zip_c:
+            acc = bss_service.get_account_by_phone(str(phone).strip())
+        if not acc and raw_zip:
+            zip_c = clean_zip_code(str(raw_zip).strip())
             acc = bss_service.get_account_by_zip(zip_c)
+        if not acc and caller_ani:
+            acc = bss_service.get_account_by_phone(str(caller_ani).strip())
 
         if acc:
             return (
@@ -188,12 +204,18 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         )
 
     elif name == "search_telecom_knowledge":
-        query = args.get("query", "")
+        query = args.get("query") or args.get("q") or args.get("topic") or ""
         return search_kb(query)
 
     elif name == "process_bill_payment":
-        raw_acc = args.get("account_number")
-        acc_num = clean_account_number(raw_acc) if raw_acc else None
+        raw_acc = (
+            args.get("account_number")
+            or args.get("accountNumber")
+            or args.get("account")
+            or args.get("account_id")
+            or args.get("identifier")
+        )
+        acc_num = clean_account_number(str(raw_acc)) if raw_acc is not None else None
         amount = float(args.get("amount", 0.0))
         if not acc_num or amount <= 0:
             return "Payment failed: Missing valid account number or amount."
@@ -204,8 +226,15 @@ async def _execute_tool(name: str, args: Dict[str, Any], session_id: str, caller
         )
 
     elif name == "diagnose_and_reboot_router":
-        raw_acc = args.get("account_number", "ACC-992014-X")
-        acc_num = clean_account_number(raw_acc)
+        raw_acc = (
+            args.get("account_number")
+            or args.get("accountNumber")
+            or args.get("account")
+            or args.get("account_id")
+            or args.get("identifier")
+            or "1001"
+        )
+        acc_num = clean_account_number(str(raw_acc))
         res = bss_service.bounce_router(acc_num)
         return f"Router reset signal sent. Status: {res.get('status')}. Message: {res.get('message')}"
 
