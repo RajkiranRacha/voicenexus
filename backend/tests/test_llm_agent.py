@@ -36,6 +36,31 @@ async def test_llm_agent_tools_execution():
     assert acc_res["customer_name"] == "Jordan Rivera"
     assert agent.account is not None
 
+    # 2b. lookup_account by customer name
+    name_res = await agent._execute_tool("lookup_account", {"identifier": "Elena Vance"})
+    assert name_res["found"] is True
+    assert name_res["account_number"] == "ACC-881230-B"
+
+    # 2c. lookup_account by email
+    email_res = await agent._execute_tool("lookup_account", {"identifier": "sam.taylor@example.com"})
+    assert email_res["found"] is True
+    assert email_res["customer_name"] == "Sam Taylor"
+
+    # 2d. lookup_account by 4-digit account number
+    acc4_res = await agent._execute_tool("lookup_account", {"identifier": "1001"})
+    assert acc4_res["found"] is True
+    assert acc4_res["customer_name"] == "Sam Taylor"
+
+    # 2e. lookup_account by phone number
+    phone_res = await agent._execute_tool("lookup_account", {"identifier": "555-010-2002"})
+    assert phone_res["found"] is True
+    assert phone_res["customer_name"] == "Alex Morgan"
+
+    # 2f. lookup_account by billing zip code
+    zip_res = await agent._execute_tool("lookup_account", {"identifier": "78701"})
+    assert zip_res["found"] is True
+    assert zip_res["customer_name"] == "Marcus Brody"
+
     # 3. check_network_outage
     outage_res = await agent._execute_tool("check_network_outage", {"zip_code": "98101"})
     assert outage_res["has_outage"] is True

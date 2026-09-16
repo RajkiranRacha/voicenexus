@@ -2,30 +2,45 @@ export const PRESET_CALLERS = [
   {
     name: "Jordan Rivera",
     ani: "+15550192834",
-    scenario: "Billing balance ($142.50), card on file, payment promise"
+    scenario: "Acc: ACC-992014-X | Zip: 94107 | $142.50 balance | Online"
   },
   {
     name: "Elena Vance",
     ani: "+15550148821",
-    scenario: "Seattle Metro area broadband outage"
+    scenario: "Acc: ACC-881230-B | Zip: 98101 | Active outage in Seattle | Offline"
   },
   {
     name: "Marcus Brody",
     ani: "+15550173399",
-    scenario: "Degraded Wi-Fi gateway / packet loss triage"
+    scenario: "Acc: ACC-773419-C | Zip: 78701 | $220.00 past due | Degraded Wi-Fi"
+  },
+  {
+    name: "Sam Taylor",
+    ani: "+15550101001",
+    scenario: "Acc: ACC-1001 | Zip: 90210 | $45.00 balance | 4-digit account test"
+  },
+  {
+    name: "Alex Morgan",
+    ani: "+15550102002",
+    scenario: "Acc: ACC-2002 | Zip: 10001 | $0.00 balance | Fiber 1000 plan"
   },
   {
     name: "Unregistered Caller (Unknown ANI)",
     ani: "+15559990000",
-    scenario: "Requires KBA Auth (Account # or Zip code 94107)"
+    scenario: "Unknown caller - test finding account by Name, Email, Phone, Zip, or Acc #"
   }
 ];
 
 export const PRESET_UTTERANCES = [
+  { label: "Auth: By Name (Jordan Rivera)", text: "My name is Jordan Rivera." },
+  { label: "Auth: By Account (ACC-992014-X)", text: "My account number is ACC-992014-X." },
+  { label: "Auth: By 4-Digit Acc (1001)", text: "My account number is 1001." },
+  { label: "Auth: By Phone (555-014-8821)", text: "My phone number is 555-014-8821." },
+  { label: "Auth: By Email (sam.taylor@example.com)", text: "My email is sam.taylor@example.com." },
+  { label: "Auth: By Zip Code (94107)", text: "My billing zip code is 94107." },
   { label: "Pay Bill Now (Card on File)", text: "I want to pay my bill now using the card on file." },
   { label: "Confirm Card Payment", text: "Yes, please charge my card." },
   { label: "Check Balance & Pay Next Week", text: "How much is my bill and can I set up a payment arrangement for next Friday?" },
-  { label: "KBA Auth: Verify Zip 94107", text: "My billing zip code is 94107." },
   { label: "Bilingual: Switch to Spanish", text: "Quiero hablar en español." },
   { label: "Bilingual: Switch to English", text: "Please switch back to English." },
   { label: "Pronunciation: ONT & VoIP Status", text: "What is my ONT and VoIP speed status?" },

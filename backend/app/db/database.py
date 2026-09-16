@@ -69,11 +69,12 @@ class TelecomDatabase:
             conn.commit()
         self._seed_default_data()
 
-    def _seed_default_data(self):
+    def _seed_default_data(self, force: bool = False):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM subscribers")
-            if cursor.fetchone()[0] == 0:
+            count = cursor.fetchone()[0]
+            if count == 0 or force or count < 5:
                 subscribers = [
                     ("ACC-992014-X", "+15550192834", "Jordan Rivera", "94107", "450 Townsend St, San Francisco, CA", "GigaFiber 500 Ultra", 80.0, 142.5, (datetime.now() + timedelta(days=4)).strftime("%Y-%m-%d"), "4242", "jordan.rivera@example.com", "UNAUTHENTICATED", 0, "ONLINE"),
                     ("ACC-881230-B", "+15550148821", "Elena Vance", "98101", "1201 3rd Ave, Seattle, WA", "FiberConnect 300", 65.0, 0.0, (datetime.now() + timedelta(days=20)).strftime("%Y-%m-%d"), "1188", "elena.vance@example.com", "UNAUTHENTICATED", 1, "OFFLINE"),
@@ -84,9 +85,12 @@ class TelecomDatabase:
                 cursor.executemany("INSERT OR REPLACE INTO subscribers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", subscribers)
 
             cursor.execute("SELECT COUNT(*) FROM outages")
-            if cursor.fetchone()[0] == 0:
+            if cursor.fetchone()[0] == 0 or force:
                 cursor.execute("INSERT OR REPLACE INTO outages VALUES (?, ?, ?, ?, ?, ?)", ("98101", "Downtown Seattle Metro", 1420, "CREW_DISPATCHED", "2 hours from now", "Fiber trunk line damage due to municipal utility work"))
             conn.commit()
+
+    def reseed_defaults(self, force: bool = True):
+        self._seed_default_data(force=force)
 
     def get_all_subscribers(self) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
@@ -192,6 +196,55 @@ class TelecomDatabase:
                 d = dict(row)
                 d["has_active_outage"] = bool(d["has_active_outage"])
                 return d
+        return None
+
+    def get_subscriber_by_name(self, customer_name: str) -> Optional[Dict[str, Any]]:
+        cleaned = customer_name.strip().lower()
+        if not cleaned:
+            return None
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM subscribers WHERE LOWER(customer_name) = ?", (cleaned,))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                d["has_active_outage"] = bool(d["has_active_outage"])
+                return d
+            cursor.execute("SELECT * FROM subscribers")
+            rows = cursor.fetchall()
+            for r in rows:
+                db_name = r["customer_name"].strip().lower()
+                if cleaned == db_name or cleaned in db_name or db_name in cleaned:
+                    d = dict(r)
+                    d["has_active_outage"] = bool(d["has_active_outage"])
+                    return d
+                caller_parts = set(cleaned.split())
+                db_parts = set(db_name.split())
+                if len(caller_parts.intersection(db_parts)) >= 2:
+                    d = dict(r)
+                    d["has_active_outage"] = bool(d["has_active_outage"])
+                    return d
+        return None
+
+    def get_subscriber_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        cleaned = email.strip().lower()
+        if not cleaned:
+            return None
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM subscribers WHERE LOWER(email) = ?", (cleaned,))
+            row = cursor.fetchone()
+            if row:
+                d = dict(row)
+                d["has_active_outage"] = bool(d["has_active_outage"])
+                return d
+            cursor.execute("SELECT * FROM subscribers")
+            for r in cursor.fetchall():
+                db_email = (r["email"] or "").strip().lower()
+                if cleaned in db_email or db_email in cleaned:
+                    d = dict(r)
+                    d["has_active_outage"] = bool(d["has_active_outage"])
+                    return d
         return None
 
     def update_balance(self, account_number: str, new_balance: float) -> bool:

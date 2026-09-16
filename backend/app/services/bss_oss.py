@@ -56,8 +56,40 @@ class BssOssService:
                 monthly_rate=110.00,
                 current_balance=220.00,
                 due_date=(datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d"),  # Past due
+                payment_card_last4="9901",
+                email="marcus.brody@example.com",
                 has_active_outage=False,
                 router_status="DEGRADED"
+            ),
+            SubscriberAccount(
+                account_number="ACC-1001",
+                phone_number="+15550101001",
+                customer_name="Sam Taylor",
+                zip_code="90210",
+                address="100 Beverly Blvd, Beverly Hills, CA",
+                plan_name="GigaFiber 500 Ultra",
+                monthly_rate=80.00,
+                current_balance=45.00,
+                due_date=(datetime.now() + timedelta(days=12)).strftime("%Y-%m-%d"),
+                payment_card_last4="1001",
+                email="sam.taylor@example.com",
+                has_active_outage=False,
+                router_status="ONLINE"
+            ),
+            SubscriberAccount(
+                account_number="ACC-2002",
+                phone_number="+15550102002",
+                customer_name="Alex Morgan",
+                zip_code="10001",
+                address="350 5th Ave, New York, NY",
+                plan_name="FiberConnect 1000",
+                monthly_rate=95.00,
+                current_balance=0.00,
+                due_date=(datetime.now() + timedelta(days=18)).strftime("%Y-%m-%d"),
+                payment_card_last4="2002",
+                email="alex.morgan@example.com",
+                has_active_outage=False,
+                router_status="ONLINE"
             ),
         ]
         for sub in subscribers:
@@ -72,6 +104,17 @@ class BssOssService:
             "estimated_resolution": "2 hours from now",
             "reason": "Fiber trunk line damage due to municipal utility work"
         }
+
+    def reload_from_db(self):
+        """Refreshes in-memory accounts from persistent SQLite database."""
+        try:
+            from app.db.database import db
+            rows = db.get_all_subscribers()
+            for r in rows:
+                acc = SubscriberAccount(**r)
+                self._accounts[acc.phone_number] = acc
+        except Exception as e:
+            print(f"[BssOssService] reload_from_db error: {e}")
 
     def get_account_by_phone(self, phone_number: str) -> Optional[SubscriberAccount]:
         from app.utils.speech_normalizer import extract_digits
@@ -123,6 +166,48 @@ class BssOssService:
         try:
             from app.db.database import db
             row = db.get_subscriber_by_zip(cleaned)
+            if row:
+                acc = SubscriberAccount(**row)
+                self._accounts[acc.phone_number] = acc
+                return acc
+        except Exception:
+            pass
+        return None
+
+    def get_account_by_name(self, customer_name: str) -> Optional[SubscriberAccount]:
+        cleaned = customer_name.strip().lower()
+        if not cleaned:
+            return None
+        for acc in self._accounts.values():
+            acc_name = acc.customer_name.strip().lower()
+            if cleaned == acc_name or cleaned in acc_name or acc_name in cleaned:
+                return acc
+            caller_parts = set(cleaned.split())
+            db_parts = set(acc_name.split())
+            if len(caller_parts.intersection(db_parts)) >= 2:
+                return acc
+        try:
+            from app.db.database import db
+            row = db.get_subscriber_by_name(customer_name)
+            if row:
+                acc = SubscriberAccount(**row)
+                self._accounts[acc.phone_number] = acc
+                return acc
+        except Exception:
+            pass
+        return None
+
+    def get_account_by_email(self, email: str) -> Optional[SubscriberAccount]:
+        cleaned = email.strip().lower()
+        if not cleaned:
+            return None
+        for acc in self._accounts.values():
+            acc_email = (acc.email or "").strip().lower()
+            if cleaned == acc_email or cleaned in acc_email:
+                return acc
+        try:
+            from app.db.database import db
+            row = db.get_subscriber_by_email(email)
             if row:
                 acc = SubscriberAccount(**row)
                 self._accounts[acc.phone_number] = acc

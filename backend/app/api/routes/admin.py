@@ -201,8 +201,8 @@ def test_knowledge_query(req: KnowledgeTestRequest):
     return {"matched": False, "message": "No article matched with confidence >= 0.70. Would trigger standard flow or escalation."}
 
 
-# Subscriber & Test Customer Management
 from app.db.database import db
+from app.services.bss_oss import bss_service
 
 class SubscriberUpsertRequest(BaseModel):
     account_number: str
@@ -226,17 +226,20 @@ def get_all_subscribers():
 def upsert_subscriber(req: SubscriberUpsertRequest):
     """Add or update a subscriber account, e.g. registering user's personal phone number."""
     saved = db.upsert_subscriber(req.model_dump())
+    bss_service.reload_from_db()
     return {"success": True, "subscriber": saved}
 
 @router.delete("/subscribers/{account_number}")
 def delete_subscriber(account_number: str):
     """Delete a subscriber account."""
     success = db.delete_subscriber(account_number)
+    bss_service.reload_from_db()
     return {"success": success, "account_number": account_number}
 
 @router.post("/subscribers/seed")
 def reseed_subscribers():
     """Reseeds standard test accounts."""
-    db._seed_default_data()
+    db.reseed_defaults(force=True)
+    bss_service.reload_from_db()
     return {"success": True, "subscribers": db.get_all_subscribers()}
 
